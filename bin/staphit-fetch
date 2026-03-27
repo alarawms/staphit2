@@ -1,0 +1,447 @@
+#!/usr/bin/env python3
+"""staphit-fetch: SRA/ENA search and metadata bridge for the Staphit pipeline.
+
+Searches NCBI SRA for sequencing runs, previews metadata completeness,
+and downloads data with PHA4GE-compatible metadata output.
+"""
+import argparse
+import csv
+import io
+import os
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+import xml.etree.ElementTree as ET
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_DIR = os.path.dirname(SCRIPT_DIR)
+
+ENTREZ_BASE = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils'
+
+# Columns written to search_results.tsv
+OUTPUT_COLUMNS = [
+    'run_accession', 'biosample', 'bioproject', 'organism',
+    'geo_loc_name', 'collection_date', 'host', 'isolation_source',
+    'host_disease', 'strain', 'spots', 'bases', 'platform',
+]
+
+# Map SRA runinfo CSV columns to our output columns
+RUNINFO_FIELD_MAP = {
+    'Run': 'run_accession',
+    'BioSample': 'biosample',
+    'BioProject': 'bioproject',
+    'Organism': 'organism',
+    'geo_loc_name_country_calc': 'geo_loc_name',
+    'Consent': None,
+    'Host': 'host',
+    'Isolation_source': 'isolation_source',
+    'SRA_Sample': None,
+    'spots': 'spots',
+    'bases': 'bases',
+    'Platform': 'platform',
+    'strain': 'strain',
+    'collection_date_sam': 'collection_date',
+    'host_disease': 'host_disease',
+}
+
+# Map SRA fields to PHA4GE metadata schema
+PHA4GE_FIELD_MAP = {
+    'run_accession': 'sra_accession',
+    'biosample': 'biosample_accession',
+    'geo_loc_name': 'geo_loc_country',
+    'collection_date': 'collection_date',
+    'host': 'host',
+    'isolation_source': 'isolation_source',
+    'strain': 'strain',
+    'host_disease': 'host_disease',
+    'organism': 'organism',
+}
+
+DEFAULT_TIMEOUT = 30
+MAX_RETRIES = 3
+RETRY_DELAY = 2
+BATCH_SIZE = 500
+
+
+def _http_get(url, timeout=DEFAULT_TIMEOUT, retries=MAX_RETRIES):
+    """Fetch a URL with retry logic. Returns response body as string."""
+    last_error = None
+    for attempt in range(retries):
+        try:
+            req = urllib.request.Request(url)
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return resp.read().decode('utf-8')
+        except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
+            last_error = e
+            if attempt < retries - 1:
+                time.sleep(RETRY_DELAY * (attempt + 1))
+    raise ConnectionError(f'Failed after {retries} attempts: {last_error}')
+
+
+def build_search_query(organism, country=None, date_range=None, bioproject=None):
+    """Build an NCBI SRA search query string."""
+    parts = [
+        f'"{organism}"[Organism]',
+        'paired[Layout]',
+        'illumina[Platform]',
+    ]
+    if country:
+        parts.append(f'"{country}"[geo_loc_name]')
+    if date_range:
+        if '-' in date_range:
+            start, end = date_range.split('-', 1)
+            parts.append(f'("{start}/01/01"[Publication Date] : "{end}/12/31"[Publication Date])')
+        else:
+            parts.append(f'"{date_range}"[Publication Date]')
+    if bioproject:
+        parts.append(f'{bioproject}[BioProject]')
+    return ' AND '.join(parts)
+
+
+def esearch(query, limit=500):
+    """Run NCBI esearch and return (count, webenv, query_key)."""
+    params = urllib.parse.urlencode({
+        'db': 'sra',
+        'term': query,
+        'retmax': 0,
+        'usehistory': 'y',
+    })
+    url = f'{ENTREZ_BASE}/esearch.fcgi?{params}'
+    xml_text = _http_get(url)
+    root = ET.fromstring(xml_text)
+
+    count = int(root.findtext('Count', '0'))
+    webenv = root.findtext('WebEnv', '')
+    query_key = root.findtext('QueryKey', '')
+
+    return count, webenv, query_key
+
+
+def efetch_runinfo(webenv, query_key, retstart=0, retmax=500):
+    """Fetch SRA runinfo CSV using WebEnv history server."""
+    params = urllib.parse.urlencode({
+        'db': 'sra',
+        'query_key': query_key,
+        'WebEnv': webenv,
+        'rettype': 'runinfo',
+        'retmode': 'csv',
+        'retstart': retstart,
+        'retmax': retmax,
+    })
+    url = f'{ENTREZ_BASE}/efetch.fcgi?{params}'
+    return _http_get(url)
+
+
+def parse_runinfo_csv(csv_text):
+    """Parse SRA runinfo CSV text into a list of dicts with normalized field names.
+
+    Returns list of dicts with keys from OUTPUT_COLUMNS.
+    """
+    records = []
+    reader = csv.DictReader(io.StringIO(csv_text))
+    for row in reader:
+        if not row.get('Run'):
+            continue
+        record = {col: '' for col in OUTPUT_COLUMNS}
+        for sra_field, our_field in RUNINFO_FIELD_MAP.items():
+            if our_field and sra_field in row:
+                record[our_field] = (row[sra_field] or '').strip()
+        records.append(record)
+    return records
+
+
+def parse_geo_loc_name(value):
+    """Parse geo_loc_name like 'Saudi Arabia: Riyadh' into (country, region).
+
+    Returns (country, region) tuple. Region may be empty string.
+    """
+    if not value:
+        return '', ''
+    value = value.strip()
+    if ':' in value:
+        parts = value.split(':', 1)
+        return parts[0].strip(), parts[1].strip()
+    return value, ''
+
+
+def map_to_pha4ge(records):
+    """Map SRA search results to PHA4GE metadata schema.
+
+    Returns list of dicts with PHA4GE column names.
+    """
+    mapped = []
+    for rec in records:
+        row = {}
+        for sra_key, pha4ge_key in PHA4GE_FIELD_MAP.items():
+            row[pha4ge_key] = rec.get(sra_key, '')
+
+        # Parse geo_loc_name into country and region
+        country, region = parse_geo_loc_name(rec.get('geo_loc_name', ''))
+        row['geo_loc_country'] = country
+        row['geo_loc_region'] = region
+
+        # Use run_accession as sample_id
+        row['sample_id'] = rec.get('run_accession', '')
+
+        mapped.append(row)
+    return mapped
+
+
+def calculate_completeness(records, fields=None):
+    """Calculate per-field completeness statistics.
+
+    Returns dict of {field: {'count': n, 'total': t, 'pct': p}}.
+    """
+    if not records:
+        return {}
+    if fields is None:
+        fields = list(records[0].keys())
+
+    total = len(records)
+    stats = {}
+    for field in fields:
+        count = sum(1 for r in records if r.get(field, '').strip())
+        stats[field] = {
+            'count': count,
+            'total': total,
+            'pct': round(100 * count / total, 1) if total > 0 else 0.0,
+        }
+    return stats
+
+
+def generate_samplesheet(records, output_path):
+    """Generate a nf-core/fetchngs-compatible samplesheet CSV.
+
+    Writes a CSV with columns: sample, fastq_1, fastq_2.
+    For download, only the accession is needed.
+    """
+    with open(output_path, 'w', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=['sample', 'fastq_1', 'fastq_2'])
+        writer.writeheader()
+        for rec in records:
+            acc = rec.get('run_accession', rec.get('sra_accession', rec.get('sample_id', '')))
+            writer.writerow({
+                'sample': acc,
+                'fastq_1': '',
+                'fastq_2': '',
+            })
+
+
+def generate_metadata_csv(records, output_path):
+    """Generate PHA4GE-compatible sample_metadata.csv from mapped records."""
+    if not records:
+        return
+    fieldnames = list(records[0].keys())
+    with open(output_path, 'w', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(records)
+
+
+def read_search_results(tsv_path):
+    """Read search results TSV file into list of dicts."""
+    records = []
+    with open(tsv_path, newline='') as f:
+        reader = csv.DictReader(f, delimiter='\t')
+        for row in reader:
+            records.append(dict(row))
+    return records
+
+
+def write_search_results(records, output_path):
+    """Write search results to TSV file."""
+    with open(output_path, 'w', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=OUTPUT_COLUMNS, delimiter='\t')
+        writer.writeheader()
+        for rec in records:
+            writer.writerow({col: rec.get(col, '') for col in OUTPUT_COLUMNS})
+
+
+# ---------------------------------------------------------------------------
+# Subcommands
+# ---------------------------------------------------------------------------
+
+def cmd_search(args):
+    """Execute the search subcommand."""
+    query = build_search_query(
+        args.organism,
+        country=args.country,
+        date_range=args.date_range,
+        bioproject=args.bioproject,
+    )
+    print(f'Query: {query}', file=sys.stderr)
+
+    count, webenv, query_key = esearch(query, limit=args.limit)
+    print(f'Found {count} runs in SRA', file=sys.stderr)
+
+    if count == 0:
+        print('No results found.', file=sys.stderr)
+        sys.exit(0)
+
+    # Fetch in batches
+    all_records = []
+    to_fetch = min(count, args.limit)
+    for start in range(0, to_fetch, BATCH_SIZE):
+        batch_size = min(BATCH_SIZE, to_fetch - start)
+        print(f'Fetching records {start + 1}-{start + batch_size}...', file=sys.stderr)
+        csv_text = efetch_runinfo(webenv, query_key, retstart=start, retmax=batch_size)
+        records = parse_runinfo_csv(csv_text)
+        all_records.extend(records)
+        if start + batch_size < to_fetch:
+            time.sleep(0.4)  # Be polite to NCBI
+
+    print(f'Retrieved {len(all_records)} run records', file=sys.stderr)
+    write_search_results(all_records, args.output)
+    print(f'Results written to {args.output}', file=sys.stderr)
+
+
+def cmd_preview(args):
+    """Execute the preview subcommand."""
+    records = read_search_results(args.input_tsv)
+    if not records:
+        print('No records found in input file.', file=sys.stderr)
+        sys.exit(1)
+
+    print(f'\n{"=" * 60}')
+    print(f'  Search Results Preview')
+    print(f'{"=" * 60}')
+    print(f'  Total samples: {len(records)}')
+
+    # Date range
+    dates = sorted(d for d in (r.get('collection_date', '') for r in records) if d)
+    if dates:
+        print(f'  Date range: {dates[0]} to {dates[-1]}')
+    else:
+        print(f'  Date range: not available')
+
+    # Country distribution
+    countries = {}
+    for rec in records:
+        geo = rec.get('geo_loc_name', '').strip()
+        country, _ = parse_geo_loc_name(geo)
+        if country:
+            countries[country] = countries.get(country, 0) + 1
+    if countries:
+        print(f'\n  Country distribution:')
+        for c, n in sorted(countries.items(), key=lambda x: -x[1])[:15]:
+            print(f'    {c}: {n}')
+
+    # Metadata completeness
+    stats = calculate_completeness(records)
+    print(f'\n  Metadata completeness:')
+    for field, info in sorted(stats.items(), key=lambda x: -x[1]['pct']):
+        bar_len = int(info['pct'] / 5)
+        bar = '#' * bar_len + '.' * (20 - bar_len)
+        print(f'    {field:25s} [{bar}] {info["pct"]:5.1f}% ({info["count"]}/{info["total"]})')
+
+    print(f'{"=" * 60}\n')
+
+
+def cmd_download(args):
+    """Execute the download subcommand."""
+    records = read_search_results(args.input_tsv)
+    if not records:
+        print('No records found in input file.', file=sys.stderr)
+        sys.exit(1)
+
+    # Limit samples
+    if args.max_samples and len(records) > args.max_samples:
+        print(f'Limiting to {args.max_samples} of {len(records)} samples', file=sys.stderr)
+        records = records[:args.max_samples]
+
+    os.makedirs(args.output_dir, exist_ok=True)
+
+    # Generate accession list
+    acc_list_path = os.path.join(args.output_dir, 'accessions.txt')
+    with open(acc_list_path, 'w') as f:
+        for rec in records:
+            f.write(rec.get('run_accession', '') + '\n')
+    print(f'Accession list: {acc_list_path} ({len(records)} accessions)', file=sys.stderr)
+
+    # Generate samplesheet for nf-core/fetchngs
+    samplesheet_path = os.path.join(args.output_dir, 'samplesheet.csv')
+    generate_samplesheet(records, samplesheet_path)
+    print(f'Samplesheet: {samplesheet_path}', file=sys.stderr)
+
+    # Map to PHA4GE and generate metadata
+    pha4ge_records = map_to_pha4ge(records)
+    metadata_path = os.path.join(args.output_dir, 'sample_metadata.csv')
+    generate_metadata_csv(pha4ge_records, metadata_path)
+    print(f'Metadata: {metadata_path}', file=sys.stderr)
+
+    # Report completeness
+    stats = calculate_completeness(pha4ge_records)
+    complete_fields = sum(1 for s in stats.values() if s['pct'] == 100.0)
+    partial_fields = sum(1 for s in stats.values() if 0 < s['pct'] < 100.0)
+    empty_fields = sum(1 for s in stats.values() if s['pct'] == 0.0)
+    print(f'\nMetadata completeness: {complete_fields} complete, '
+          f'{partial_fields} partial, {empty_fields} empty fields', file=sys.stderr)
+
+    if args.fetch:
+        # Try fasterq-dump if available
+        import shutil
+        if shutil.which('fasterq-dump'):
+            print(f'\nDownloading FASTQs with fasterq-dump...', file=sys.stderr)
+            import subprocess
+            for i, rec in enumerate(records, 1):
+                acc = rec.get('run_accession', '')
+                print(f'  [{i}/{len(records)}] {acc}', file=sys.stderr)
+                subprocess.run([
+                    'fasterq-dump', '--split-files', '--outdir', args.output_dir, acc
+                ], check=True)
+        else:
+            print('\nfasterq-dump not found. Use nf-core/fetchngs with the '
+                  'generated samplesheet, or install sra-tools.', file=sys.stderr)
+    else:
+        print(f'\nTo download FASTQs, either:', file=sys.stderr)
+        print(f'  1. Run: nextflow run nf-core/fetchngs --input {samplesheet_path}', file=sys.stderr)
+        print(f'  2. Run: staphit-fetch download {args.input_tsv} --output-dir {args.output_dir} --fetch', file=sys.stderr)
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        prog='staphit-fetch',
+        description='Search NCBI SRA and bridge metadata for the Staphit pipeline.',
+    )
+    subparsers = parser.add_subparsers(dest='command', required=True)
+
+    # search
+    sp_search = subparsers.add_parser('search', help='Search NCBI SRA for sequencing runs')
+    sp_search.add_argument('--organism', default='Staphylococcus aureus',
+                           help='Organism name (default: Staphylococcus aureus)')
+    sp_search.add_argument('--country', default=None,
+                           help='Filter by country (geo_loc_name)')
+    sp_search.add_argument('--date-range', default=None,
+                           help='Date range, e.g. 2020-2024')
+    sp_search.add_argument('--bioproject', default=None,
+                           help='Filter by BioProject accession')
+    sp_search.add_argument('--limit', type=int, default=500,
+                           help='Maximum number of results (default: 500)')
+    sp_search.add_argument('-o', '--output', default='search_results.tsv',
+                           help='Output TSV file (default: search_results.tsv)')
+    sp_search.set_defaults(func=cmd_search)
+
+    # preview
+    sp_preview = subparsers.add_parser('preview', help='Preview search results and metadata completeness')
+    sp_preview.add_argument('input_tsv', help='Path to search_results.tsv')
+    sp_preview.set_defaults(func=cmd_preview)
+
+    # download
+    sp_download = subparsers.add_parser('download', help='Download data and generate pipeline-ready files')
+    sp_download.add_argument('input_tsv', help='Path to search_results.tsv')
+    sp_download.add_argument('--output-dir', default='fetched/',
+                             help='Output directory (default: fetched/)')
+    sp_download.add_argument('--max-samples', type=int, default=None,
+                             help='Maximum number of samples to process')
+    sp_download.add_argument('--fetch', action='store_true',
+                             help='Actually download FASTQs via fasterq-dump')
+    sp_download.set_defaults(func=cmd_download)
+
+    args = parser.parse_args()
+    args.func(args)
+
+
+if __name__ == '__main__':
+    main()
