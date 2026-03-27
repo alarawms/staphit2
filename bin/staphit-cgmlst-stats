@@ -1,0 +1,81 @@
+#!/usr/bin/env python3
+"""staphit-cgmlst-stats: merge cgMLST stats into final_summary.tsv."""
+import argparse
+import csv
+import sys
+
+# ---------------------------------------------------------------------------
+# Core functions
+# ---------------------------------------------------------------------------
+
+
+def read_cgmlst_stats(stats_path):
+    """Read cgmlst_stats.tsv and return dict of sample_id -> {called_loci, missing_loci}."""
+    lookup = {}
+    with open(stats_path, newline='') as fh:
+        reader = csv.DictReader(fh, delimiter='\t')
+        for row in reader:
+            sid = row['sample_id']
+            lookup[sid] = {
+                'called_loci': row['called_loci'],
+                'missing_loci': row['missing_loci'],
+            }
+    return lookup
+
+
+def merge_cgmlst(summary_path, stats_lookup):
+    """Read final_summary.tsv and return augmented rows with cgMLST columns.
+
+    Returns (fieldnames, rows) where fieldnames includes the two new columns
+    and rows is a list of dicts.
+    """
+    with open(summary_path, newline='') as fh:
+        reader = csv.DictReader(fh, delimiter='\t')
+        fieldnames = list(reader.fieldnames) + [
+            'cgmlst_called_loci',
+            'cgmlst_missing_loci',
+        ]
+        rows = []
+        for row in reader:
+            sid = row.get('sample_id', '')
+            stats = stats_lookup.get(sid, {})
+            row['cgmlst_called_loci'] = stats.get('called_loci', '')
+            row['cgmlst_missing_loci'] = stats.get('missing_loci', '')
+            rows.append(row)
+    return fieldnames, rows
+
+
+def write_tsv(fieldnames, rows, output):
+    """Write augmented rows as TSV to a file handle."""
+    writer = csv.DictWriter(output, fieldnames=fieldnames, delimiter='\t',
+                            extrasaction='ignore', lineterminator='\n')
+    writer.writeheader()
+    writer.writerows(rows)
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='Merge cgMLST stats into final_summary.tsv',
+    )
+    parser.add_argument('summary_tsv', help='Path to final_summary.tsv')
+    parser.add_argument('cgmlst_stats', help='Path to cgmlst_stats.tsv')
+    parser.add_argument('-o', '--output', help='Output TSV path (default: stdout)')
+    args = parser.parse_args()
+
+    stats_lookup = read_cgmlst_stats(args.cgmlst_stats)
+    fieldnames, rows = merge_cgmlst(args.summary_tsv, stats_lookup)
+
+    if args.output:
+        with open(args.output, 'w', newline='') as fh:
+            write_tsv(fieldnames, rows, fh)
+    else:
+        write_tsv(fieldnames, rows, sys.stdout)
+
+
+if __name__ == '__main__':
+    main()

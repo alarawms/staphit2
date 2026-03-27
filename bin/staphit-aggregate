@@ -1,0 +1,565 @@
+#!/usr/bin/env python3
+"""staphit-aggregate: standalone aggregation of per-sample pipeline outputs."""
+import argparse
+import csv
+import json
+import os
+import re
+import sys
+
+# ---------------------------------------------------------------------------
+# Mutation constants (inline — don't import from staphit-mutations)
+# ---------------------------------------------------------------------------
+
+_MUT_CLASS_MAP = {
+    'QUINOLONE': 'Fluoroquinolones', 'RIFAMYCIN': 'Rifampicin', 'RIFAMPICIN': 'Rifampicin',
+    'FUSIDIC ACID': 'Fusidic Acid', 'FOSFOMYCIN': 'Fosfomycin', 'MUPIROCIN': 'Mupirocin',
+    'TETRACYCLINE': 'Tetracycline', 'TRIMETHOPRIM': 'Trimethoprim', 'SULFONAMIDE': 'Sulfonamide',
+    'LINCOSAMIDE': 'Lincosamide', 'OXAZOLIDINONE': 'Linezolid', 'PHENICOL': 'Phenicol',
+    'BETA-LACTAM': 'Beta-lactam',
+}
+
+_MUT_CLASS_TO_AB = {
+    'Fluoroquinolones': ['Levofloxacin', 'Moxifloxacin', 'Ciprofloxacin'],
+    'Rifampicin': ['Rifampicin'], 'Fusidic Acid': ['Fusidic Acid'],
+    'Fosfomycin': ['Fosfomycin'], 'Mupirocin': ['Mupirocin'],
+    'Tetracycline': ['Tetracycline', 'Doxycycline', 'Tigecycline'],
+    'Trimethoprim': ['Trimethoprim/Sulfamethoxazole'],
+    'Sulfonamide': ['Trimethoprim/Sulfamethoxazole'],
+    'Linezolid': ['Linezolid'], 'Phenicol': ['Chloramphenicol'],
+    'Beta-lactam': ['Oxacillin', 'Benzylpenicillin'],
+    'Lincosamide': ['Clindamycin'],
+}
+
+# ---------------------------------------------------------------------------
+# Import virulence profiling from sibling script (fallback to inline stubs)
+# ---------------------------------------------------------------------------
+
+def _import_module(name, path):
+    """Import a Python script without a .py extension via SourceFileLoader."""
+    import importlib.machinery
+    import importlib.util
+    loader = importlib.machinery.SourceFileLoader(name, path)
+    spec = importlib.util.spec_from_loader(name, loader)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+_BIN_DIR = os.path.dirname(os.path.abspath(__file__))
+
+try:
+    _vir_mod = _import_module('staphit_virulence', os.path.join(_BIN_DIR, 'staphit-virulence'))
+    profile_virulence = _vir_mod.profile_virulence
+    format_summary = _vir_mod.format_summary
+    normalize_gene = _vir_mod.normalize_gene
+except Exception:
+    # Minimal fallback so the script can still run without staphit-virulence
+    def normalize_gene(name):
+        return name.strip()
+
+    def profile_virulence(gene_list, identity_map=None):
+        return {
+            'pvl': {'status': 'negative', 'genes': [], 'complete': False},
+            'tsst': {'status': 'negative', 'genes': []},
+            'enterotoxins': {'count': 0, 'genes': []},
+            'exfoliatins': {'status': 'negative', 'genes': []},
+            'biofilm': {'ica_operon': 'absent', 'genes': [], 'missing': []},
+            'hemolysins': {'genes': [], 'hlg_operon': 'absent', 'hlg_missing': []},
+            'iec': {'type': None, 'genes': []},
+            'leukocidins': {},
+            'immune_evasion': {'genes': []},
+            'superantigens': {'set_count': 0, 'set_genes': []},
+            'allelic_variants': [],
+            'genes': sorted(set(gene_list or [])),
+        }
+
+    def format_summary(profile):
+        return 'PVL-;TSST-;IEC-negative;ica:absent;hlg:absent'
+
+# ---------------------------------------------------------------------------
+# Parser functions
+# ---------------------------------------------------------------------------
+
+
+def parse_metadata(json_path, sample_id):
+    """Load metadata JSON list and find the entry matching sample_id."""
+    if not os.path.exists(json_path) or os.path.getsize(json_path) == 0:
+        return {}
+    with open(json_path, 'r') as f:
+        meta_list = json.load(f)
+    for m in meta_list:
+        if m.get('run_id') == sample_id or m.get('sample_id') == sample_id:
+            return m
+    return {}
+
+
+def parse_trimmomatic(log_path):
+    """Parse a Trimmomatic log file for read-pair survival stats."""
+    with open(log_path, 'r') as f:
+        content = f.read()
+    match = re.search(r'Input Read Pairs: (\d+).*Both Surviving: (\d+)', content)
+    if not match:
+        return {'raw_reads': 0, 'trimmed_reads': 0, 'survival_rate': 0, 'q30_rate': 0}
+    raw = int(match.group(1))
+    surviving = int(match.group(2))
+    rate = (surviving / raw * 100) if raw > 0 else 0
+    return {'raw_reads': raw, 'trimmed_reads': surviving, 'survival_rate': rate, 'q30_rate': 0}
+
+
+def parse_quast(quast_dir):
+    """Parse QUAST transposed_report.tsv for assembly stats."""
+    report_path = os.path.join(quast_dir, 'transposed_report.tsv')
+    if not os.path.exists(report_path):
+        return {'n50': 0, 'contigs': 0, 'length': 0, 'gc': 0.0}
+    with open(report_path, 'r') as f:
+        reader = csv.DictReader(f, delimiter='\t')
+        row = next(reader)
+    return {
+        'n50': int(row.get('N50', 0)),
+        'contigs': int(row.get('# contigs', 0)),
+        'length': int(row.get('Total length', 0)),
+        'gc': float(row.get('GC (%)', 0)),
+    }
+
+
+def parse_mlst(tsv_path):
+    """Parse MLST output (auto-detect comma or tab delimiter)."""
+    with open(tsv_path, 'r') as f:
+        first_line = f.readline()
+        f.seek(0)
+        delim = ',' if ',' in first_line else '\t'
+        reader = csv.reader(f, delimiter=delim)
+        for row in reader:
+            if len(row) >= 3:
+                return {'scheme': row[1], 'st': row[2], 'alleles': row[3:]}
+    return {'scheme': '-', 'st': '-', 'alleles': []}
+
+
+def parse_spatyper(tsv_path):
+    """Parse spaTyper tab-separated output (with or without header)."""
+    with open(tsv_path, 'r') as f:
+        reader = csv.reader(f, delimiter='\t')
+        header = next(reader, None)
+        row = None
+        if header:
+            if 'Repeats' in header or 'Type' in header:
+                row = next(reader, None)
+            else:
+                row = header
+        if row and len(row) >= 3:
+            return {'type': row[2], 'repeats': row[1]}
+    return {'type': '-', 'repeats': ''}
+
+
+def parse_sccmec(tsv_path):
+    """Parse SCCmec typing TSV."""
+    with open(tsv_path, 'r') as f:
+        reader = csv.DictReader(f, delimiter='\t')
+        row = next(reader, None)
+    if row:
+        sccmec_type = row.get('SCCmec_Type') or row.get('type') or 'ND'
+        return {'type': sccmec_type, 'full_row': dict(row)}
+    return {'type': 'ND', 'full_row': {}}
+
+
+def parse_agr(json_path):
+    """Parse agr typing JSON output."""
+    if not os.path.exists(json_path) or os.path.getsize(json_path) == 0:
+        return {'group': 'ND', 'confidence': 0.0}
+    with open(json_path, 'r') as f:
+        agr_data = json.load(f)
+    return {
+        'group': agr_data.get('agr_group', 'ND'),
+        'confidence': agr_data.get('confidence', 0.0),
+    }
+
+
+def parse_abricate(dir_path):
+    """Parse ABRicate output directory for resfinder, vfdb, plasmidfinder tabs.
+
+    Returns (resistance_list, virulence_list, plasmids_list).
+    """
+    resistance, virulence, plasmids = [], [], []
+    if not os.path.isdir(dir_path):
+        return resistance, virulence, plasmids
+
+    for fname in os.listdir(dir_path):
+        if not fname.endswith('.tab'):
+            continue
+        fpath = os.path.join(dir_path, fname)
+        lower = fname.lower()
+        if 'resfinder' in lower:
+            db = 'resfinder'
+        elif 'vfdb' in lower:
+            db = 'vfdb'
+        elif 'plasmidfinder' in lower:
+            db = 'plasmidfinder'
+        else:
+            continue
+
+        with open(fpath, 'r') as f:
+            reader = csv.DictReader(f, delimiter='\t')
+            for row in reader:
+                item = {
+                    'gene': row.get('GENE'),
+                    'coverage': float(row.get('%COVERAGE', 0)),
+                    'identity': float(row.get('%IDENTITY', 0)),
+                    'accession': row.get('ACCESSION'),
+                    'product': row.get('PRODUCT'),
+                    'database': db,
+                }
+                if db == 'resfinder':
+                    resistance.append(item)
+                elif db == 'vfdb':
+                    virulence.append(item)
+                elif db == 'plasmidfinder':
+                    plasmids.append(item)
+
+    return resistance, virulence, plasmids
+
+
+def parse_amrfinder(tsv_path):
+    """Parse AMRFinderPlus TSV. Returns (amr_items, point_mutations)."""
+    amr_items = []
+    point_mutations = []
+    with open(tsv_path, 'r') as f:
+        reader = csv.DictReader(f, delimiter='\t')
+        for row in reader:
+            item = {
+                'gene': row.get('Gene symbol'),
+                'coverage': float(row.get('% Coverage of reference', row.get('% Coverage', 0))),
+                'identity': float(row.get('% Identity to reference', row.get('% Identity', 0))),
+                'accession': row.get('Accession of closest sequence'),
+                'product': row.get('Sequence name'),
+                'element_type': row.get('Element type'),
+                'element_subtype': row.get('Element subtype') or row.get('Subtype'),
+                'class': row.get('Class'),
+                'subclass': row.get('Subclass'),
+            }
+            amr_items.append(item)
+
+            subtype = item['element_subtype'] or ''
+            if subtype == 'POINT':
+                symbol = item.get('gene') or ''
+                parts = symbol.split('_', 1)
+                if len(parts) == 2:
+                    gene, mutation = parts
+                    dc_raw = (item.get('class') or '').strip().upper()
+                    point_mutations.append({
+                        'gene': gene,
+                        'mutation': mutation,
+                        'drug_class': _MUT_CLASS_MAP.get(dc_raw, dc_raw),
+                        'subclass': item.get('subclass', ''),
+                        'symbol': symbol,
+                    })
+
+    return amr_items, point_mutations
+
+
+def parse_kma(res_path):
+    """Parse KMA results file, skipping # header lines."""
+    results = []
+    if not os.path.exists(res_path):
+        return results
+    with open(res_path, 'r') as f:
+        reader = csv.reader(f, delimiter='\t')
+        # Skip comment lines starting with #
+        first_data = None
+        for row in reader:
+            if row and row[0].startswith('#'):
+                continue
+            first_data = row
+            break
+        # Process first data row
+        if first_data and len(first_data) > 4:
+            results.append({
+                'gene': first_data[0].strip(),
+                'score': first_data[1].strip(),
+                'identity': first_data[4].strip(),
+            })
+        # Process remaining rows
+        for row in reader:
+            if len(row) > 4:
+                results.append({
+                    'gene': row[0].strip(),
+                    'score': row[1].strip(),
+                    'identity': row[4].strip(),
+                })
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Mutation profiling helpers
+# ---------------------------------------------------------------------------
+
+
+def _build_predicted_resistance(point_mutations):
+    """From point mutations, predict resistance classes."""
+    predicted = {}
+    for m in point_mutations:
+        if m['drug_class']:
+            predicted[m['drug_class']] = 'R'
+    return predicted
+
+
+def _build_geno_pheno(predicted_resistance, antibiogram_data):
+    """Compare predicted resistance with antibiogram phenotype."""
+    if not predicted_resistance or not antibiogram_data:
+        return {}
+    abg_by_drug = {
+        e.get('antibiotic', ''): e.get('sir', '')
+        for e in antibiogram_data if e.get('antibiotic') and e.get('sir')
+    }
+    geno_pheno = {}
+    for dc, pred in predicted_resistance.items():
+        targets = _MUT_CLASS_TO_AB.get(dc, [])
+        observed = [(ab, abg_by_drug[ab]) for ab in targets if ab in abg_by_drug]
+        if observed:
+            geno_pheno[dc] = {
+                'genotype': pred,
+                'phenotype': ';'.join(f'{ab}={sir}' for ab, sir in observed),
+                'concordant': any(sir == pred for _, sir in observed),
+            }
+    return geno_pheno
+
+
+# ---------------------------------------------------------------------------
+# Summary output
+# ---------------------------------------------------------------------------
+
+SUMMARY_HEADERS = [
+    'sample_id',
+    'total_reads', 'trimmed_reads', 'survival_rate', 'q30_rate',
+    'assembly_length', 'contigs', 'n50', 'gc_percent',
+    'mlst_scheme', 'mlst_st',
+    'spa_type', 'sccmec_type', 'agr_group',
+    'amrfinder_genes', 'abricate_genes', 'kma_genes',
+    'point_mutations', 'geno_pheno_discordance',
+    'virulence_genes', 'virulence_summary', 'plasmids',
+    'infection_origin', 'ast_profile',
+]
+
+
+def build_summary_row(data):
+    """Build a (headers, values) tuple for the TSV summary line.
+
+    *data* is the full aggregated report dict (same structure as the JSON
+    report written by main()).
+    """
+    qc = data.get('qc', {})
+    asm = data.get('assembly', {})
+    typing = data.get('typing', {})
+
+    total_reads = qc.get('raw_reads', 0)
+    trimmed_reads = qc.get('trimmed_reads', 0)
+    survival_rate = f"{qc.get('survival_rate', 0):.2f}"
+    q30_rate = f"{qc.get('q30_rate', 0):.2f}"
+
+    asm_len = asm.get('length', 0)
+    contigs = asm.get('contigs', 0)
+    n50 = asm.get('n50', 0)
+    gc = f"{asm.get('gc', 0):.2f}"
+
+    mlst_scheme = typing.get('mlst', {}).get('scheme', '-')
+    mlst_st = typing.get('mlst', {}).get('st', '-')
+    spa_type = typing.get('spa', {}).get('type', '-')
+    sccmec_type = typing.get('sccmec', {}).get('type', '-')
+    agr_group = typing.get('agr', {}).get('group', '-')
+
+    amr_genes = ';'.join(sorted({
+        r['gene'] for r in data.get('resistance', {}).get('amrfinder', []) if r.get('gene')
+    }))
+    abricate_genes = ';'.join(sorted({
+        r['gene'] for r in data.get('resistance', {}).get('abricate', []) if r.get('gene')
+    }))
+    kma_genes = ';'.join(sorted({
+        r['gene'] for r in data.get('resistance', {}).get('kma', []) if r.get('gene')
+    }))
+
+    point_mut_str = data.get('point_mutations', {}).get('_summary', '')
+    gp = data.get('point_mutations', {}).get('genotype_phenotype', {})
+    discordance_count = sum(1 for v in gp.values() if not v.get('concordant', True))
+    geno_pheno_discord = str(discordance_count) if gp else ''
+
+    vir_genes = ';'.join(sorted({
+        v['gene'] for v in data.get('virulence', []) if v.get('gene')
+    }))
+    virulence_summary = data.get('virulence_profile', {}).get('_summary', '')
+    plasmids_str = ';'.join(sorted({
+        p['gene'] for p in data.get('plasmids', []) if p.get('gene')
+    }))
+
+    infection_origin = data.get('metadata', {}).get('infection_origin', '')
+    antibiogram = data.get('metadata', {}).get('antibiogram', [])
+    ast_parts = []
+    for entry in antibiogram:
+        ab = entry.get('antibiotic', '')
+        sir = entry.get('sir', '')
+        if ab and sir:
+            ast_parts.append(f'{ab[:3].upper()}:{sir}')
+    ast_profile = ';'.join(ast_parts) if ast_parts else ''
+
+    values = [
+        data.get('sample_id', ''),
+        total_reads, trimmed_reads, survival_rate, q30_rate,
+        asm_len, contigs, n50, gc,
+        mlst_scheme, mlst_st,
+        spa_type, sccmec_type, agr_group,
+        amr_genes, abricate_genes, kma_genes,
+        point_mut_str, geno_pheno_discord,
+        vir_genes, virulence_summary, plasmids_str,
+        infection_origin, ast_profile,
+    ]
+    return SUMMARY_HEADERS, values
+
+
+# ---------------------------------------------------------------------------
+# main
+# ---------------------------------------------------------------------------
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='Aggregate per-sample Staphit pipeline outputs into JSON + TSV.',
+    )
+    parser.add_argument('--sample-id', required=True, help='Sample identifier')
+    parser.add_argument('--trim-log', help='Trimmomatic log file')
+    parser.add_argument('--fastqc-dir', help='FastQC output directory (unused, reserved)')
+    parser.add_argument('--quast-dir', help='QUAST output directory')
+    parser.add_argument('--mlst', help='MLST TSV output')
+    parser.add_argument('--abricate-dir', help='Directory with ABRicate .tab files')
+    parser.add_argument('--amrfinder', help='AMRFinderPlus TSV output')
+    parser.add_argument('--mash', help='Mash sketch file (unused, reserved)')
+    parser.add_argument('--spa', help='spaTyper TSV output')
+    parser.add_argument('--sccmec', help='SCCmec TSV output')
+    parser.add_argument('--agr', help='Agr typing JSON output')
+    parser.add_argument('--kma', help='KMA results file')
+    parser.add_argument('--metadata', help='Metadata JSON file')
+    parser.add_argument('--outdir', required=True, help='Output directory')
+    args = parser.parse_args()
+
+    sample_id = args.sample_id
+
+    data = {
+        'sample_id': sample_id,
+        'metadata': {},
+        'qc': {},
+        'assembly': {},
+        'typing': {'mlst': {}, 'spa': {}, 'sccmec': {}, 'agr': {}},
+        'resistance': {'abricate': [], 'amrfinder': [], 'kma': []},
+        'virulence': [],
+        'plasmids': [],
+    }
+
+    # Metadata
+    if args.metadata:
+        try:
+            data['metadata'] = parse_metadata(args.metadata, sample_id)
+        except Exception as e:
+            print(f'Warning: Metadata parse error: {e}', file=sys.stderr)
+
+    # Trimmomatic
+    if args.trim_log:
+        try:
+            data['qc'] = parse_trimmomatic(args.trim_log)
+        except Exception as e:
+            print(f'Warning: Trimmomatic parse error: {e}', file=sys.stderr)
+
+    # QUAST
+    if args.quast_dir:
+        try:
+            data['assembly'] = parse_quast(args.quast_dir)
+        except Exception as e:
+            print(f'Warning: QUAST parse error: {e}', file=sys.stderr)
+
+    # MLST
+    if args.mlst:
+        try:
+            data['typing']['mlst'] = parse_mlst(args.mlst)
+        except Exception as e:
+            print(f'Warning: MLST parse error: {e}', file=sys.stderr)
+
+    # spaTyper
+    if args.spa:
+        try:
+            data['typing']['spa'] = parse_spatyper(args.spa)
+        except Exception as e:
+            print(f'Warning: SpaTyper parse error: {e}', file=sys.stderr)
+
+    # SCCmec
+    if args.sccmec:
+        try:
+            data['typing']['sccmec'] = parse_sccmec(args.sccmec)
+        except Exception as e:
+            print(f'Warning: SCCmec parse error: {e}', file=sys.stderr)
+
+    # Agr
+    if args.agr:
+        try:
+            data['typing']['agr'] = parse_agr(args.agr)
+        except Exception as e:
+            print(f'Warning: Agr parse error: {e}', file=sys.stderr)
+
+    # Abricate
+    if args.abricate_dir:
+        try:
+            resistance, virulence, plasmids = parse_abricate(args.abricate_dir)
+            data['resistance']['abricate'] = resistance
+            data['virulence'] = virulence
+            data['plasmids'] = plasmids
+        except Exception as e:
+            print(f'Warning: Abricate parse error: {e}', file=sys.stderr)
+
+    # Virulence profiling
+    vir_genes_list = [v['gene'] for v in data['virulence'] if v.get('gene')]
+    vir_identity = {v['gene']: v.get('identity', 100) for v in data['virulence'] if v.get('gene')}
+    data['virulence_profile'] = profile_virulence(vir_genes_list, vir_identity)
+    data['virulence_profile']['_summary'] = format_summary(data['virulence_profile'])
+
+    # AMRFinderPlus
+    point_mutations = []
+    if args.amrfinder:
+        try:
+            amr_items, point_mutations = parse_amrfinder(args.amrfinder)
+            data['resistance']['amrfinder'] = amr_items
+        except Exception as e:
+            print(f'Warning: AMRFinderPlus parse error: {e}', file=sys.stderr)
+
+    # Mutation profiling
+    predicted_resistance = _build_predicted_resistance(point_mutations)
+    antibiogram_data = data.get('metadata', {}).get('antibiogram', [])
+    geno_pheno = _build_geno_pheno(predicted_resistance, antibiogram_data)
+    mutation_summary = ';'.join(f"{m['gene']}:{m['mutation']}" for m in point_mutations)
+    data['point_mutations'] = {
+        'mutations': point_mutations,
+        'predicted_resistance': predicted_resistance,
+        'genotype_phenotype': geno_pheno,
+        '_summary': mutation_summary,
+    }
+
+    # KMA
+    if args.kma:
+        try:
+            data['resistance']['kma'] = parse_kma(args.kma)
+        except Exception as e:
+            print(f'Warning: KMA parse error: {e}', file=sys.stderr)
+
+    # Write outputs
+    os.makedirs(args.outdir, exist_ok=True)
+
+    report_path = os.path.join(args.outdir, f'{sample_id}_report.json')
+    with open(report_path, 'w') as f:
+        json.dump(data, f, indent=2)
+
+    summary_path = os.path.join(args.outdir, f'{sample_id}_summary.csv')
+    headers, values = build_summary_row(data)
+    with open(summary_path, 'w', newline='') as f:
+        writer = csv.writer(f, delimiter='\t')
+        writer.writerow(headers)
+        writer.writerow(values)
+
+    print(f'Aggregation complete for {sample_id}')
+
+
+if __name__ == '__main__':
+    main()

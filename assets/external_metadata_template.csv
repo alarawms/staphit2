@@ -1,0 +1,4 @@
+UID,gender,age,isolation site,in-patient/out-patient,diagnosis,VAN,CLIN,OXA,ERY,TRI,GENTA,CIPRO,DOXY,TETRA,RIFA,TIG,LIN,MUP,CEF,MOX,PENIC
+ID00001,male,61,nasal,out-patient,prostate cancer,S,S,,S,R,S,,,,,,,,,S,
+ID00002,female,52,urine,in-patient,syncope,,,,S,S,,S,,,,,,,,,,
+ID00003,female,52,sputum,in-patient,hypopharyngeal cancer,S,S,,,R,,,,,,,,,,,,

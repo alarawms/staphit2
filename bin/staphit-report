@@ -1,0 +1,448 @@
+#!/usr/bin/env python3
+"""staphit-report: automated run report generator for the Staphit pipeline."""
+import argparse
+import csv
+import json
+import os
+import sys
+from collections import Counter
+from datetime import date
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _count_frequencies(series):
+    """Take a list of semicolon-separated strings, split, count, return Counter.
+
+    Empty strings and '-' values are skipped.
+    """
+    counter = Counter()
+    for value in series:
+        if not value or value == '-':
+            continue
+        for item in value.split(';'):
+            item = item.strip()
+            if item and item != '-':
+                counter[item] += 1
+    return counter
+
+
+def _read_tsv(path):
+    """Read a TSV file and return a list of dicts."""
+    rows = []
+    with open(path, newline='') as fh:
+        reader = csv.DictReader(fh, delimiter='\t')
+        for row in reader:
+            rows.append(row)
+    return rows
+
+
+def _safe_float(val, default=0.0):
+    """Convert a value to float, returning default on failure."""
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_int(val, default=0):
+    """Convert a value to int, returning default on failure."""
+    try:
+        return int(float(val))
+    except (TypeError, ValueError):
+        return default
+
+
+def _freq_table(counter, top_n, total, label):
+    """Build a Markdown table from a Counter for the top N entries."""
+    if not counter:
+        return f"No {label} data available.\n"
+    lines = []
+    lines.append(f"| {label} | Count | % |")
+    lines.append("| --- | ---: | ---: |")
+    for item, count in counter.most_common(top_n):
+        pct = (count / total * 100) if total > 0 else 0
+        lines.append(f"| {item} | {count} | {pct:.1f} |")
+    return '\n'.join(lines) + '\n'
+
+
+# ---------------------------------------------------------------------------
+# Section builders
+# ---------------------------------------------------------------------------
+
+def build_header(rows):
+    """Build the report header section."""
+    lines = [
+        "# Staphit Run Report",
+        "",
+        f"**Generated:** {date.today().isoformat()}",
+        f"**Samples:** {len(rows)}",
+        "",
+    ]
+    return '\n'.join(lines)
+
+
+def build_assembly_qc(rows):
+    """Build Assembly QC section with mean/min/max stats."""
+    lengths = [_safe_int(r.get('assembly_length')) for r in rows]
+    n50s = [_safe_int(r.get('n50')) for r in rows]
+    contig_counts = [_safe_int(r.get('contigs')) for r in rows]
+
+    # Filter out zeros (missing data)
+    lengths = [v for v in lengths if v > 0]
+    n50s = [v for v in n50s if v > 0]
+    contig_counts = [v for v in contig_counts if v > 0]
+
+    if not lengths and not n50s and not contig_counts:
+        return ""
+
+    lines = ["## Assembly QC", ""]
+    lines.append("| Metric | Mean | Min | Max |")
+    lines.append("| --- | ---: | ---: | ---: |")
+
+    if lengths:
+        lines.append(
+            f"| Assembly length | {sum(lengths)/len(lengths):,.0f} "
+            f"| {min(lengths):,} | {max(lengths):,} |"
+        )
+    if n50s:
+        lines.append(
+            f"| N50 | {sum(n50s)/len(n50s):,.0f} "
+            f"| {min(n50s):,} | {max(n50s):,} |"
+        )
+    if contig_counts:
+        lines.append(
+            f"| Contigs | {sum(contig_counts)/len(contig_counts):,.1f} "
+            f"| {min(contig_counts)} | {max(contig_counts)} |"
+        )
+
+    lines.append("")
+    return '\n'.join(lines)
+
+
+def build_typing_overview(rows):
+    """Build Typing Overview section with ST, spa, and SCCmec distributions."""
+    total = len(rows)
+    if total == 0:
+        return ""
+
+    st_values = [r.get('mlst_st', '-') for r in rows]
+    spa_values = [r.get('spa_type', '-') for r in rows]
+    sccmec_values = [r.get('sccmec_type', '-') for r in rows]
+
+    st_counter = Counter(v for v in st_values if v and v != '-')
+    spa_counter = Counter(v for v in spa_values if v and v != '-')
+    sccmec_counter = Counter(v for v in sccmec_values if v and v not in ('-', 'ND', ''))
+
+    if not st_counter and not spa_counter and not sccmec_counter:
+        return ""
+
+    lines = ["## Typing Overview", ""]
+
+    if st_counter:
+        lines.append("### ST Distribution")
+        lines.append("")
+        lines.append(_freq_table(st_counter, 10, total, "ST"))
+        lines.append("")
+
+    if spa_counter:
+        lines.append("### spa Type Distribution")
+        lines.append("")
+        lines.append(_freq_table(spa_counter, 10, total, "spa Type"))
+        lines.append("")
+
+    if sccmec_counter:
+        lines.append("### SCCmec Distribution")
+        lines.append("")
+        lines.append(_freq_table(sccmec_counter, 5, total, "SCCmec Type"))
+        lines.append("")
+
+    return '\n'.join(lines)
+
+
+def build_resistance(rows):
+    """Build Resistance section with AMR gene and point mutation frequencies."""
+    total = len(rows)
+    if total == 0:
+        return ""
+
+    amr_series = [r.get('amrfinder_genes', '') for r in rows]
+    mut_series = [r.get('point_mutations', '') for r in rows]
+
+    amr_counter = _count_frequencies(amr_series)
+    mut_counter = _count_frequencies(mut_series)
+
+    # Check for geno_pheno_discordance
+    discord_count = 0
+    has_discord_col = any('geno_pheno_discordance' in r for r in rows)
+    if has_discord_col:
+        for r in rows:
+            val = r.get('geno_pheno_discordance', '')
+            if val and val not in ('', '0'):
+                discord_count += 1
+
+    if not amr_counter and not mut_counter and discord_count == 0:
+        return ""
+
+    lines = ["## Resistance", ""]
+
+    if amr_counter:
+        lines.append("### AMR Gene Frequency")
+        lines.append("")
+        lines.append(_freq_table(amr_counter, 15, total, "Gene"))
+        lines.append("")
+
+    if mut_counter:
+        lines.append("### Point Mutations")
+        lines.append("")
+        lines.append(_freq_table(mut_counter, 10, total, "Mutation"))
+        lines.append("")
+
+    if has_discord_col and discord_count > 0:
+        lines.append(
+            f"**Note:** {discord_count} sample(s) showed genotype-phenotype discordance."
+        )
+        lines.append("")
+
+    return '\n'.join(lines)
+
+
+def build_virulence(rows):
+    """Build Virulence section from virulence_summary column."""
+    total = len(rows)
+    if total == 0:
+        return ""
+
+    summaries = [r.get('virulence_summary', '') for r in rows if r.get('virulence_summary')]
+    if not summaries:
+        return ""
+
+    pvl_pos = 0
+    tsst_pos = 0
+    iec_counter = Counter()
+    ica_counter = Counter()
+
+    for summary in summaries:
+        parts = summary.split(';')
+        for part in parts:
+            part = part.strip()
+            if part == 'PVL+':
+                pvl_pos += 1
+            if part == 'TSST+':
+                tsst_pos += 1
+            if part.startswith('IEC-'):
+                iec_counter[part] += 1
+            if part.startswith('ica:'):
+                ica_counter[part] += 1
+
+    lines = ["## Virulence", ""]
+
+    lines.append(f"- **PVL+ rate:** {pvl_pos}/{total} ({pvl_pos/total*100:.1f}%)")
+    lines.append(f"- **TSST+ rate:** {tsst_pos}/{total} ({tsst_pos/total*100:.1f}%)")
+    lines.append("")
+
+    if iec_counter:
+        lines.append("### IEC Type Distribution")
+        lines.append("")
+        lines.append(_freq_table(iec_counter, 10, total, "IEC Type"))
+        lines.append("")
+
+    if ica_counter:
+        lines.append("### ica Operon Status")
+        lines.append("")
+        lines.append(_freq_table(ica_counter, 10, total, "Status"))
+        lines.append("")
+
+    return '\n'.join(lines)
+
+
+def build_outbreak_clusters(cluster_path):
+    """Build Outbreak Clusters section from cluster_report.json."""
+    if not cluster_path or not os.path.exists(cluster_path):
+        return ""
+
+    with open(cluster_path, 'r') as fh:
+        clusters = json.load(fh)
+
+    if not clusters:
+        return ""
+
+    lines = ["## Outbreak Clusters", ""]
+    lines.append(
+        "| Cluster ID | Tier | Size | Shared ST | Locations | Date Range |"
+    )
+    lines.append("| --- | --- | ---: | --- | --- | --- |")
+
+    largest = 0
+    for c in clusters:
+        size = c.get('size', 0)
+        if size > largest:
+            largest = size
+        locations = c.get('locations', '')
+        if isinstance(locations, list):
+            locations = ', '.join(locations)
+        lines.append(
+            f"| {c.get('cluster_id', '')} "
+            f"| {c.get('tier', '')} "
+            f"| {size} "
+            f"| {c.get('shared_st', '')} "
+            f"| {locations} "
+            f"| {c.get('date_range', '')} |"
+        )
+
+    lines.append("")
+    lines.append(f"**Summary:** {len(clusters)} cluster(s), largest size: {largest}")
+    lines.append("")
+
+    return '\n'.join(lines)
+
+
+def build_qc_flags(qc_path):
+    """Build QC Flags section from qc_report.tsv."""
+    if not qc_path or not os.path.exists(qc_path):
+        return ""
+
+    rows = _read_tsv(qc_path)
+    if not rows:
+        return ""
+
+    passed = [r for r in rows if r.get('pass', '').upper() == 'PASS']
+    failed = [r for r in rows if r.get('pass', '').upper() == 'FAIL']
+
+    lines = ["## QC Flags", ""]
+    lines.append(f"- **Passed:** {len(passed)}")
+    lines.append(f"- **Failed:** {len(failed)}")
+    lines.append("")
+
+    if failed:
+        lines.append("### Failed Samples")
+        lines.append("")
+        lines.append("| Sample | Completeness | Contamination | Reason |")
+        lines.append("| --- | ---: | ---: | --- |")
+        for r in failed:
+            lines.append(
+                f"| {r.get('sample_id', '')} "
+                f"| {r.get('completeness', '')} "
+                f"| {r.get('contamination', '')} "
+                f"| {r.get('reason', '')} |"
+            )
+        lines.append("")
+
+    return '\n'.join(lines)
+
+
+def build_plasmids(plasmid_path):
+    """Build Plasmids section from plasmid_summary.tsv."""
+    if not plasmid_path or not os.path.exists(plasmid_path):
+        return ""
+
+    rows = _read_tsv(plasmid_path)
+    if not rows:
+        return ""
+
+    plasmid_counts = [_safe_int(r.get('plasmid_count', 0)) for r in rows]
+    mean_count = sum(plasmid_counts) / len(plasmid_counts) if plasmid_counts else 0
+
+    mobilizable = [
+        r for r in rows
+        if r.get('mobilizable', '').lower() in ('true', 'yes', '1')
+    ]
+
+    lines = ["## Plasmids", ""]
+    lines.append(f"- **Mean plasmid count:** {mean_count:.1f}")
+    lines.append(f"- **Samples with mobilizable plasmids:** {len(mobilizable)}")
+    lines.append("")
+
+    return '\n'.join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Report generation
+# ---------------------------------------------------------------------------
+
+def generate_report(summary_path, cluster_path=None, qc_path=None,
+                    plasmid_path=None):
+    """Generate a full Markdown run report.
+
+    Parameters
+    ----------
+    summary_path : str
+        Path to final_summary.tsv (required).
+    cluster_path : str or None
+        Path to cluster_report.json (optional).
+    qc_path : str or None
+        Path to qc_report.tsv (optional).
+    plasmid_path : str or None
+        Path to plasmid_summary.tsv (optional).
+
+    Returns
+    -------
+    str
+        The report as Markdown text.
+    """
+    rows = _read_tsv(summary_path)
+
+    sections = []
+    sections.append(build_header(rows))
+    sections.append(build_assembly_qc(rows))
+    sections.append(build_typing_overview(rows))
+    sections.append(build_resistance(rows))
+    sections.append(build_virulence(rows))
+    sections.append(build_outbreak_clusters(cluster_path))
+    sections.append(build_qc_flags(qc_path))
+    sections.append(build_plasmids(plasmid_path))
+
+    # Filter out empty sections and join
+    report = '\n'.join(s for s in sections if s)
+    return report
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(
+        description='Generate an automated Staphit run report in Markdown.'
+    )
+    parser.add_argument(
+        '--summary', required=True,
+        help='Path to final_summary.tsv (required).',
+    )
+    parser.add_argument(
+        '--clusters',
+        help='Path to cluster_report.json (optional).',
+    )
+    parser.add_argument(
+        '--qc',
+        help='Path to qc_report.tsv (optional).',
+    )
+    parser.add_argument(
+        '--plasmids',
+        help='Path to plasmid_summary.tsv (optional).',
+    )
+    parser.add_argument(
+        '-o', '--output', required=True,
+        help='Output path for the Markdown report.',
+    )
+    args = parser.parse_args(argv)
+
+    report = generate_report(
+        summary_path=args.summary,
+        cluster_path=args.clusters,
+        qc_path=args.qc,
+        plasmid_path=args.plasmids,
+    )
+
+    os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
+    with open(args.output, 'w') as fh:
+        fh.write(report)
+
+    print(f"Report written to {args.output} ({len(report)} bytes)")
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

@@ -1,0 +1,302 @@
+#!/usr/bin/env python3
+"""Generate publication-ready figures from Staphit pipeline summary."""
+
+import argparse
+import os
+import sys
+
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt  # noqa: E402
+import pandas as pd  # noqa: E402
+import seaborn as sns  # noqa: E402
+
+try:
+    import toytree
+    HAS_TOYTREE = True
+except ImportError:
+    HAS_TOYTREE = False
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _read_summary(path):
+    """Read a summary TSV/CSV into a DataFrame."""
+    if path.endswith('.tsv'):
+        return pd.read_csv(path, sep='\t')
+    return pd.read_csv(path)
+
+
+def _tree_leaf_order(tree_path):
+    """Return list of leaf names in tree traversal order, or None."""
+    if tree_path is None or not HAS_TOYTREE:
+        return None
+    try:
+        tree = toytree.tree(tree_path)
+        return tree.get_tip_labels()
+    except Exception:
+        return None
+
+
+def _reorder_rows(df, leaf_order, id_col='sample_id'):
+    """Reorder df rows to match tree leaf order where possible."""
+    if leaf_order is None:
+        return df
+    # Keep only samples present in df
+    ordered = [s for s in leaf_order if s in df[id_col].values]
+    remaining = [s for s in df[id_col].values if s not in ordered]
+    order = ordered + remaining
+    df = df.set_index(id_col).loc[order].reset_index()
+    return df
+
+
+# ---------------------------------------------------------------------------
+# Plot functions
+# ---------------------------------------------------------------------------
+
+def plot_mlst_distribution(df, outdir, dpi):
+    """Bar chart of mlst_st frequencies (top 30)."""
+    if 'mlst_st' not in df.columns or df['mlst_st'].dropna().empty:
+        return
+    counts = df['mlst_st'].astype(str).value_counts().head(30)
+    if counts.empty:
+        return
+
+    fig, ax = plt.subplots(figsize=(12, 6))
+    counts.plot.bar(ax=ax, color=sns.color_palette('tab20', len(counts)))
+    ax.set_title('MLST Sequence Type Distribution (top 30)')
+    ax.set_xlabel('ST')
+    ax.set_ylabel('Count')
+    plt.xticks(rotation=45, ha='right')
+    plt.tight_layout()
+    fig.savefig(os.path.join(outdir, 'mlst_distribution.png'), dpi=dpi)
+    plt.close(fig)
+
+
+def plot_amr_heatmap(df, outdir, dpi, leaf_order=None):
+    """Binary presence/absence heatmap from amrfinder_genes column."""
+    if 'amrfinder_genes' not in df.columns or 'sample_id' not in df.columns:
+        return
+    genes_series = (
+        df['amrfinder_genes']
+        .fillna('')
+        .astype(str)
+        .str.split(';')
+    )
+    all_genes = sorted({
+        g.strip() for genes in genes_series for g in genes if g.strip()
+    })
+    if not all_genes:
+        return
+
+    matrix = pd.DataFrame(0, index=df['sample_id'].values, columns=all_genes)
+    for idx, row in df.iterrows():
+        sample = row['sample_id']
+        raw = row['amrfinder_genes']
+        if not isinstance(raw, str) or not raw.strip():
+            continue
+        for gene in raw.split(';'):
+            gene = gene.strip()
+            if gene in all_genes:
+                matrix.loc[sample, gene] = 1
+
+    # Reorder by tree if available
+    if leaf_order is not None:
+        ordered = [s for s in leaf_order if s in matrix.index]
+        remaining = [s for s in matrix.index if s not in ordered]
+        matrix = matrix.loc[ordered + remaining]
+
+    fig, ax = plt.subplots(figsize=(max(12, len(all_genes) * 0.4), max(6, len(matrix) * 0.35)))
+    sns.heatmap(matrix, cmap='Blues', cbar=False, linewidths=0.5, ax=ax,
+                xticklabels=True, yticklabels=True)
+    ax.set_title('AMR Gene Presence / Absence')
+    plt.xticks(rotation=90)
+    plt.tight_layout()
+    fig.savefig(os.path.join(outdir, 'amr_heatmap.png'), dpi=dpi)
+    plt.close(fig)
+
+
+def plot_virulence_profile(df, outdir, dpi, leaf_order=None):
+    """Structured virulence profile heatmap from virulence_summary column.
+
+    Format: ``PVL+;TSST-;IEC-B;ica:complete;hlg:complete``
+    Matrix columns: [PVL, TSST, IEC, ica, hlg]
+    Values: + / complete -> 2 (red), partial -> 1 (yellow), - / absent -> 0 (white).
+    """
+    if 'virulence_summary' not in df.columns or 'sample_id' not in df.columns:
+        return
+    if df['virulence_summary'].dropna().empty:
+        return
+
+    markers = ['PVL', 'TSST', 'IEC', 'ica', 'hlg']
+    rows = []
+    for _, row in df.iterrows():
+        raw = str(row.get('virulence_summary', ''))
+        vals = {m: 0 for m in markers}
+        for token in raw.split(';'):
+            token = token.strip()
+            if not token:
+                continue
+            # Handle key:value format (ica:complete)
+            if ':' in token:
+                key, value = token.split(':', 1)
+                key = key.strip()
+                value = value.strip().lower()
+                if key in vals:
+                    if value == 'complete':
+                        vals[key] = 2
+                    elif value == 'partial':
+                        vals[key] = 1
+                    else:
+                        vals[key] = 0
+            else:
+                # Handle suffix format (PVL+, TSST-, IEC-B)
+                for m in markers:
+                    if token.upper().startswith(m.upper()):
+                        suffix = token[len(m):]
+                        if suffix in ('+',):
+                            vals[m] = 2
+                        elif suffix in ('-',):
+                            vals[m] = 0
+                        else:
+                            # e.g. IEC-B -> present (type B)
+                            vals[m] = 2
+        rows.append(vals)
+
+    matrix = pd.DataFrame(rows, index=df['sample_id'].values, columns=markers)
+
+    # Reorder by tree if available
+    if leaf_order is not None:
+        ordered = [s for s in leaf_order if s in matrix.index]
+        remaining = [s for s in matrix.index if s not in ordered]
+        matrix = matrix.loc[ordered + remaining]
+
+    from matplotlib.colors import ListedColormap
+    cmap = ListedColormap(['white', '#FFD700', '#CC0000'])
+
+    fig, ax = plt.subplots(figsize=(max(6, len(markers) * 1.2), max(4, len(matrix) * 0.35)))
+    sns.heatmap(matrix, cmap=cmap, vmin=0, vmax=2, linewidths=0.5,
+                cbar=False, ax=ax, xticklabels=True, yticklabels=True,
+                annot=True, fmt='g')
+    # Replace numeric annotations with text
+    label_map = {0: '-', 1: 'partial', 2: '+'}
+    for text_obj in ax.texts:
+        val = int(float(text_obj.get_text()))
+        text_obj.set_text(label_map.get(val, ''))
+        text_obj.set_fontsize(8)
+    ax.set_title('Virulence Profile')
+    plt.tight_layout()
+    fig.savefig(os.path.join(outdir, 'virulence_profile.png'), dpi=dpi)
+    plt.close(fig)
+
+
+def plot_annotated_phylogeny(tree_path, outdir, dpi):
+    """Render tree with toytree. Skip gracefully if toytree missing."""
+    if tree_path is None or not HAS_TOYTREE:
+        return
+    try:
+        tree = toytree.tree(tree_path)
+        canvas, axes, mark = tree.draw(
+            width=600,
+            height=max(400, tree.ntips * 20),
+            tip_labels_align=True,
+        )
+        import toyplot.png
+        toyplot.png.render(canvas, os.path.join(outdir, 'annotated_phylogeny.png'))
+    except Exception:
+        # Graceful fallback -- just skip
+        pass
+
+
+def plot_point_mutations(df, outdir, dpi):
+    """Horizontal bar chart of mutation frequencies (top 20)."""
+    if 'point_mutations' not in df.columns:
+        return
+    all_mutations = []
+    for raw in df['point_mutations'].dropna().astype(str):
+        for token in raw.split(';'):
+            token = token.strip()
+            if token and token != '-':
+                all_mutations.append(token)
+    if not all_mutations:
+        return
+
+    counts = pd.Series(all_mutations).value_counts().head(20)
+    fig, ax = plt.subplots(figsize=(10, max(4, len(counts) * 0.35)))
+    counts.sort_values().plot.barh(ax=ax, color=sns.color_palette('viridis', len(counts)))
+    ax.set_title('Point Mutation Frequencies (top 20)')
+    ax.set_xlabel('Count')
+    plt.tight_layout()
+    fig.savefig(os.path.join(outdir, 'point_mutations.png'), dpi=dpi)
+    plt.close(fig)
+
+
+def plot_assembly_qc(df, outdir, dpi):
+    """Scatter of assembly_length vs n50, colored by mlst_st."""
+    if 'assembly_length' not in df.columns or 'n50' not in df.columns:
+        return
+    plot_df = df[['assembly_length', 'n50']].copy()
+    plot_df = plot_df.dropna()
+    if plot_df.empty:
+        return
+
+    fig, ax = plt.subplots(figsize=(10, 7))
+    if 'mlst_st' in df.columns:
+        plot_df = plot_df.join(df[['mlst_st']])
+        unique_sts = plot_df['mlst_st'].astype(str).unique()
+        palette = dict(zip(unique_sts, sns.color_palette('tab20', len(unique_sts))))
+        for st in unique_sts:
+            sub = plot_df[plot_df['mlst_st'].astype(str) == st]
+            ax.scatter(sub['assembly_length'], sub['n50'], label=st,
+                       color=palette[st], s=60, edgecolors='black', linewidths=0.5)
+        ax.legend(title='ST', bbox_to_anchor=(1.05, 1), loc='upper left',
+                  fontsize='small')
+    else:
+        ax.scatter(plot_df['assembly_length'], plot_df['n50'], s=60,
+                   edgecolors='black', linewidths=0.5)
+
+    ax.set_xlabel('Assembly Length (bp)')
+    ax.set_ylabel('N50 (bp)')
+    ax.set_title('Assembly QC: Length vs N50')
+    plt.tight_layout()
+    fig.savefig(os.path.join(outdir, 'assembly_qc.png'), dpi=dpi)
+    plt.close(fig)
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(
+        description='Generate publication-ready figures from Staphit summary.'
+    )
+    parser.add_argument('summary', help='Path to final_summary.tsv')
+    parser.add_argument('output_dir', help='Directory for output PNGs')
+    parser.add_argument('--tree', default=None, help='Newick tree file')
+    parser.add_argument('--clusters', default=None, help='Clusters TSV')
+    parser.add_argument('--dpi', type=int, default=150, help='Figure DPI (default: 150)')
+
+    args = parser.parse_args(argv)
+
+    os.makedirs(args.output_dir, exist_ok=True)
+
+    df = _read_summary(args.summary)
+    if df.empty:
+        print('staphit-visualize: summary is empty, skipping all plots.', file=sys.stderr)
+        return
+
+    leaf_order = _tree_leaf_order(args.tree)
+
+    plot_mlst_distribution(df, args.output_dir, args.dpi)
+    plot_amr_heatmap(df, args.output_dir, args.dpi, leaf_order)
+    plot_virulence_profile(df, args.output_dir, args.dpi, leaf_order)
+    plot_annotated_phylogeny(args.tree, args.output_dir, args.dpi)
+    plot_point_mutations(df, args.output_dir, args.dpi)
+    plot_assembly_qc(df, args.output_dir, args.dpi)
+
+
+if __name__ == '__main__':
+    main()

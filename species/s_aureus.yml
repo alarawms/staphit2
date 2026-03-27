@@ -1,0 +1,146 @@
+# Staphylococcus aureus species descriptor
+# This file declares all organism-specific parameters for the pipeline.
+# The core pipeline reads this to activate the right tools and thresholds.
+
+name: Staphylococcus aureus
+short_name: s_aureus
+taxonomy_id: 1280
+
+# Assembly expectations
+expected_genome_size: 2800000
+min_assembly_size: 500000
+gc_range: [32, 34]
+
+# AMRFinderPlus organism flag
+amrfinderplus_organism: Staphylococcus_aureus
+
+# Typing tools to activate
+typing:
+  mlst: true
+  cgmlst:
+    scheme: cgmlst.org_S_aureus_1861
+    loci: 1861
+  custom:
+    - name: spatyper
+      container: staphb/spatyper
+      output_key: spa_type
+    - name: sccmec
+      container: staphb/sccmec
+      output_key: sccmec_type
+    - name: agr_typing
+      container: alarawms/staph_agr_typer
+      output_key: agr_group
+
+# Outbreak thresholds (calibrated to S. aureus mutation rate ~2 SNPs/genome/year)
+outbreak:
+  snp_tiers:
+    direct_transmission: 5
+    outbreak: 15
+    related: 40
+  cgmlst_tiers:
+    direct_transmission: 10
+    outbreak: 24
+    related: 50
+  estimated_mutation_rate: 2.0  # SNPs/genome/year
+
+# Reference genomes
+references:
+  primary:
+    name: NCTC 8325
+    accession: GCF_000013425.1
+    url: "https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/013/425/GCF_000013425.1_ASM1342v1/GCF_000013425.1_ASM1342v1_genomic.gbff.gz"
+  alternatives:
+    - name: USA300 FPR3757
+      accession: GCF_000009585.1
+    - name: MW2 (CA-MRSA)
+      accession: GCF_000011265.1
+    - name: N315 (HA-MRSA)
+      accession: GCF_000009645.1
+
+# Virulence profiling
+virulence:
+  profiler: bin/staphit-virulence
+  categories:
+    - name: PVL
+      type: subunit_pair
+      subunits: [lukF-PV, lukS-PV]
+      variants: [lukF-PV, "lukF'-PV", lukF-PV2, lukS-PV, "lukS'-PV"]
+      clinical_significance: "Community-acquired MRSA marker, necrotizing pneumonia risk"
+    - name: TSST
+      type: single_gene
+      genes: [tst1, tsst-1, tst]
+      clinical_significance: "Toxic shock syndrome"
+    - name: Enterotoxins
+      type: gene_count
+      genes: [sea, seb, sec, sed, see, seg, seh, sei, sej, sek, sel, sem, sen, seo, sep, seq, ser, ses, selk, sell, selm, seln, selo, selp, selq]
+      clinical_significance: "Staphylococcal food poisoning"
+    - name: Exfoliatins
+      type: presence
+      genes: [eta, etb, etd]
+      clinical_significance: "Staphylococcal scalded skin syndrome"
+    - name: IEC
+      type: combination_classifier
+      genes: [scn, chp, sak, sea, sep]
+      types:
+        A: [scn, chp, sak, sea, sep]
+        B: [scn, chp, sak]
+        C: [scn, chp]
+        D: [scn, sak, sea, sep]
+        E: [scn, sak]
+        F: [scn, sep]
+        G: [scn]
+      clinical_significance: "Immune evasion cluster — human adaptation marker"
+    - name: Biofilm
+      type: operon
+      genes: [icaA, icaB, icaC, icaD, icaR]
+      clinical_significance: "Biofilm formation, device-associated infections"
+    - name: Hemolysins
+      type: operon
+      genes: [hlgA, hlgB, hlgC]
+      additional: [hla, hlb, hld]
+      clinical_significance: "Cytolytic toxins"
+
+# Point mutations — gene to drug class mapping
+mutations:
+  profiler: bin/staphit-mutations
+  gene_drug_map:
+    gyrA: Fluoroquinolones
+    grlA: Fluoroquinolones
+    parC: Fluoroquinolones
+    parE: Fluoroquinolones
+    rpoB: Rifampicin
+    fusA: Fusidic Acid
+    rplC: Linezolid
+    rlmN: Linezolid
+    dfrB: Trimethoprim
+    folP: Sulfonamide
+    glpT: Fosfomycin
+    murA: Fosfomycin
+    ileS: Mupirocin
+    rpsJ: Tetracycline
+    pbp4: Beta-lactam
+
+# AST / Antibiogram
+ast:
+  testing_standard: CLSI
+  vitek_cards:
+    - name: AST-P580
+      antibiotics:
+        - {name: Benzylpenicillin, abbreviations: [PEN, PENIC], class: Beta-lactam}
+        - {name: Cefoxitin, abbreviations: [CEF, FOX], class: Beta-lactam, method: Screen}
+        - {name: Oxacillin, abbreviations: [OXA], class: Beta-lactam}
+        - {name: Gentamicin, abbreviations: [GEN, GENTA], class: Aminoglycoside}
+        - {name: Tobramycin, abbreviations: [TOB], class: Aminoglycoside}
+        - {name: Levofloxacin, abbreviations: [LEV], class: Fluoroquinolone}
+        - {name: Moxifloxacin, abbreviations: [MOX, MXF], class: Fluoroquinolone}
+        - {name: Erythromycin, abbreviations: [ERY], class: Macrolide}
+        - {name: Clindamycin, abbreviations: [CLIN, CLI], class: Lincosamide}
+        - {name: Linezolid, abbreviations: [LIN, LZD, LINEZ], class: Oxazolidinone}
+        - {name: Teicoplanin, abbreviations: [TEI], class: Glycopeptide}
+        - {name: Vancomycin, abbreviations: [VAN], class: Glycopeptide}
+        - {name: Tetracycline, abbreviations: [TET, TETRA], class: Tetracycline}
+        - {name: Tigecycline, abbreviations: [TIG, TGC], class: Glycylcycline}
+        - {name: Nitrofurantoin, abbreviations: [NIT], class: Nitrofuran}
+        - {name: Fusidic Acid, abbreviations: [FUS], class: Steroid}
+        - {name: Rifampicin, abbreviations: [RIF, RIFA], class: Rifamycin}
+        - {name: "Trimethoprim/Sulfamethoxazole", abbreviations: [TRI, TMP, SXT], class: Folate inhibitor}

@@ -1,0 +1,319 @@
+#!/usr/bin/env python3
+"""staphit-virulence: parse ABRicate VFDB output into structured virulence profiles."""
+import argparse
+import csv
+import json
+import re
+import sys
+
+# ---------------------------------------------------------------------------
+# Gene set definitions
+# ---------------------------------------------------------------------------
+
+PVL_F_VARIANTS = {'lukF-PV', "lukF'-PV", 'lukF-PV2'}
+PVL_S_VARIANTS = {'lukS-PV', "lukS'-PV"}
+PVL_VARIANTS = PVL_F_VARIANTS | PVL_S_VARIANTS
+
+TSST_GENES = {'tst1', 'tsst-1', 'tst'}
+
+ENTEROTOXIN_GENES = {
+    'sea', 'seb', 'sec', 'sed', 'see', 'seg', 'seh', 'sei', 'sej',
+    'sek', 'sel', 'sem', 'sen', 'seo', 'sep', 'seq', 'ser', 'ses',
+    'selk', 'sell', 'selm', 'seln', 'selo', 'selp', 'selq',
+}
+
+EXFOLIATIN_GENES = {'eta', 'etb', 'etd'}
+
+HLG_OPERON = {'hlgA', 'hlgB', 'hlgC'}
+ICA_OPERON = {'icaA', 'icaB', 'icaC', 'icaD', 'icaR'}
+
+# IEC types per van Wamel 2006
+IEC_TYPES = {
+    'A': frozenset({'scn', 'chp', 'sak', 'sea', 'sep'}),
+    'B': frozenset({'scn', 'chp', 'sak'}),
+    'C': frozenset({'scn', 'chp'}),
+    'D': frozenset({'scn', 'sak', 'sea', 'sep'}),
+    'E': frozenset({'scn', 'sak'}),
+    'F': frozenset({'scn', 'sep'}),
+    'G': frozenset({'scn'}),
+}
+
+IEC_GENES = {'scn', 'chp', 'sak', 'sea', 'sep'}
+
+LEUKOCIDIN_PAIRS = {
+    'lukDE': {'lukD', 'lukE'},
+    'lukAB': {'lukA', 'lukB', 'lukH', 'lukG', 'lukAB'},
+}
+
+HEMOLYSIN_GENES = {'hla', 'hlb', 'hld', 'hlgA', 'hlgB', 'hlgC'}
+
+IMMUNE_EVASION_GENES = {'spa', 'sbi', 'coa', 'vWbp'}
+
+# Pattern for SET (staphylococcal enterotoxin-like) genes: set followed by digits
+SET_PATTERN = re.compile(r'^set\d+$')
+
+# Forward-slash aliases in VFDB
+SLASH_NORMALIZATION = {
+    'hly/hla': 'hla',
+    'eap/map': 'eap',
+}
+
+IDENTITY_THRESHOLD = 95.0
+
+
+# ---------------------------------------------------------------------------
+# Core functions
+# ---------------------------------------------------------------------------
+
+def normalize_gene(name):
+    """Normalize a VFDB gene name: handle slash aliases."""
+    name = name.strip()
+    if name in SLASH_NORMALIZATION:
+        return SLASH_NORMALIZATION[name]
+    # General rule: if '/' present, take the second part (right of slash)
+    if '/' in name:
+        return name.split('/')[-1]
+    return name
+
+
+def classify_iec(gene_set):
+    """Classify IEC type from a set of genes.
+
+    Returns type letter (A-G), 'untyped' if scn is present but combo is novel,
+    or None if scn is absent (IEC-negative).
+    """
+    iec_present = gene_set & IEC_GENES
+    if 'scn' not in iec_present:
+        return None
+    # Check types from most specific (largest) to least specific (smallest)
+    for type_letter in ('A', 'D', 'B', 'E', 'F', 'C', 'G'):
+        if iec_present == IEC_TYPES[type_letter]:
+            return type_letter
+    return 'untyped'
+
+
+def _check_operon(gene_set, operon_genes):
+    """Check operon completeness. Returns dict with status and missing list."""
+    present = gene_set & operon_genes
+    if not present:
+        return {'status': 'absent', 'present': sorted(present), 'missing': sorted(operon_genes)}
+    missing = operon_genes - present
+    if not missing:
+        return {'status': 'complete', 'present': sorted(present), 'missing': []}
+    return {'status': 'partial', 'present': sorted(present), 'missing': sorted(missing)}
+
+
+def profile_virulence(gene_list, identity_map=None):
+    """Build a structured virulence profile from a list of gene names.
+
+    Args:
+        gene_list: list of gene name strings (as from ABRicate GENE column)
+        identity_map: optional dict mapping gene_name -> percent identity
+
+    Returns:
+        dict with keys: pvl, tsst, enterotoxins, exfoliatins, operons, iec,
+                        leukocidins, immune_evasion, set_genes, allelic_variants, genes
+    """
+    if identity_map is None:
+        identity_map = {}
+
+    # Normalize gene names
+    normalized = [normalize_gene(g) for g in gene_list]
+    gene_set = set(normalized)
+
+    # PVL: requires at least one F and one S subunit
+    has_f = bool(gene_set & PVL_F_VARIANTS)
+    has_s = bool(gene_set & PVL_S_VARIANTS)
+    pvl_genes = sorted(gene_set & PVL_VARIANTS)
+    pvl_positive = has_f and has_s
+    pvl = {
+        'status': 'positive' if pvl_positive else 'negative',
+        'genes': pvl_genes,
+        'complete': has_f and has_s,
+    }
+
+    # TSST
+    tsst_found = sorted(gene_set & TSST_GENES)
+    tsst = {
+        'status': 'positive' if tsst_found else 'negative',
+        'genes': tsst_found,
+    }
+
+    # Enterotoxins (classical only, not SET genes)
+    ent_found = sorted(gene_set & ENTEROTOXIN_GENES)
+
+    # Exfoliatins
+    exf_found = sorted(gene_set & EXFOLIATIN_GENES)
+    exfoliatins = {
+        'status': 'positive' if exf_found else 'negative',
+        'genes': exf_found,
+    }
+
+    # Biofilm (ica operon)
+    ica_status = _check_operon(gene_set, ICA_OPERON)
+    ica_found = sorted(gene_set & ICA_OPERON)
+    ica_missing = sorted(ICA_OPERON - gene_set)
+    biofilm = {
+        'ica_operon': ica_status['status'],
+        'genes': ica_found,
+        'missing': ica_missing,
+    }
+
+    # Hemolysins
+    hlg_status = _check_operon(gene_set, HLG_OPERON)
+    hlg_missing = sorted(HLG_OPERON - gene_set)
+    # Track ALL hemolysin genes found (normalize hly/hla -> hla already done)
+    all_hemolysin_found = sorted(gene_set & HEMOLYSIN_GENES)
+    hemolysins = {
+        'genes': all_hemolysin_found,
+        'hlg_operon': hlg_status['status'],
+        'hlg_missing': hlg_missing,
+    }
+
+    # IEC typing
+    iec_type = classify_iec(gene_set)
+    iec_genes_found = sorted(gene_set & IEC_GENES)
+    iec = {
+        'type': iec_type,
+        'genes': iec_genes_found,
+    }
+
+    # Leukocidin pairs
+    leukocidins = {}
+    for pair_name, pair_genes in LEUKOCIDIN_PAIRS.items():
+        found = sorted(gene_set & pair_genes)
+        if found:
+            leukocidins[pair_name] = {
+                'genes': found,
+                'complete': pair_genes <= gene_set,
+            }
+
+    # Immune evasion genes
+    immune_found = sorted(gene_set & IMMUNE_EVASION_GENES)
+
+    # SET genes (superantigens)
+    set_found = sorted(g for g in gene_set if SET_PATTERN.match(g))
+    superantigens = {
+        'set_count': len(set_found),
+        'set_genes': set_found,
+    }
+
+    # Allelic variants: identity < threshold
+    allelic_variants = []
+    # Normalize the identity_map keys too
+    norm_identity = {}
+    for g, ident in identity_map.items():
+        ng = normalize_gene(g)
+        norm_identity[ng] = ident
+    seen = set()
+    for g in normalized:
+        if g in norm_identity and norm_identity[g] < IDENTITY_THRESHOLD and g not in seen:
+            allelic_variants.append({'gene': g, 'identity': norm_identity[g]})
+            seen.add(g)
+
+    return {
+        'pvl': pvl,
+        'tsst': tsst,
+        'enterotoxins': {'count': len(ent_found), 'genes': ent_found},
+        'exfoliatins': exfoliatins,
+        'biofilm': biofilm,
+        'hemolysins': hemolysins,
+        'iec': iec,
+        'leukocidins': leukocidins,
+        'immune_evasion': {'genes': immune_found},
+        'superantigens': superantigens,
+        'allelic_variants': allelic_variants,
+        'genes': sorted(gene_set),
+    }
+
+
+def format_summary(profile):
+    """Format a one-line summary string from a virulence profile dict.
+
+    Format: "PVL+;TSST-;enterotoxins(3);IEC-B;ica:complete;hlg:complete"
+    Enterotoxins/exfoliatins sections are only included if count > 0.
+    """
+    parts = []
+    parts.append('PVL+' if profile['pvl']['status'] == 'positive' else 'PVL-')
+    parts.append('TSST+' if profile['tsst']['status'] == 'positive' else 'TSST-')
+
+    if profile['enterotoxins']['count'] > 0:
+        parts.append(f"enterotoxins({profile['enterotoxins']['count']})")
+
+    exf_count = len(profile['exfoliatins']['genes'])
+    if exf_count > 0:
+        parts.append(f"exfoliatin({exf_count})")
+
+    iec = profile['iec']['type']
+    if iec is None:
+        parts.append('IEC-negative')
+    elif iec == 'untyped':
+        parts.append('IEC-untyped')
+    else:
+        parts.append(f'IEC-{iec}')
+
+    parts.append(f"ica:{profile['biofilm']['ica_operon']}")
+    parts.append(f"hlg:{profile['hemolysins']['hlg_operon']}")
+
+    return ';'.join(parts)
+
+
+def parse_vfdb_tsv(tsv_path):
+    """Parse an ABRicate VFDB TSV file.
+
+    Returns:
+        (gene_list, identity_map) where gene_list is a list of normalized gene
+        names and identity_map maps each gene to its %IDENTITY float.
+    """
+    gene_list = []
+    identity_map = {}
+    with open(tsv_path, newline='') as fh:
+        reader = csv.reader(fh, delimiter='\t')
+        header = None
+        for row in reader:
+            if not row:
+                continue
+            # ABRicate header starts with #FILE
+            if row[0].startswith('#'):
+                header = [h.lstrip('#') for h in row]
+                continue
+            if header is None:
+                continue
+            record = dict(zip(header, row))
+            raw_gene = record.get('GENE', '').strip()
+            if not raw_gene:
+                continue
+            gene = normalize_gene(raw_gene)
+            identity = float(record.get('%IDENTITY', '0'))
+            gene_list.append(gene)
+            identity_map[gene] = identity
+    return gene_list, identity_map
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='Parse ABRicate VFDB output into structured virulence profiles.'
+    )
+    parser.add_argument('vfdb_tsv', help='ABRicate VFDB TSV output file')
+    parser.add_argument('-o', '--output', help='Output JSON file (default: stdout)')
+    parser.add_argument('--summary', action='store_true',
+                        help='Print one-line summary to stdout')
+    args = parser.parse_args()
+
+    gene_list, identity_map = parse_vfdb_tsv(args.vfdb_tsv)
+    profile = profile_virulence(gene_list, identity_map=identity_map)
+
+    # Store summary in profile for downstream consumption
+    profile['_summary'] = format_summary(profile)
+
+    # Always write JSON to output
+    out_path = args.output or '/dev/stdout'
+    with open(out_path, 'w') as f:
+        json.dump(profile, f, indent=2)
+
+    if args.summary:
+        print(profile['_summary'], file=sys.stderr)
+
+
+if __name__ == '__main__':
+    main()

@@ -1,0 +1,355 @@
+#!/usr/bin/env python3
+"""staphit-watch: monitor a directory for new FASTQ pairs and trigger pipeline runs."""
+import argparse
+import csv
+import json
+import os
+import re
+import shutil
+import smtplib
+import subprocess
+import sys
+import time
+import urllib.request
+from datetime import datetime
+from email.mime.text import MIMEText
+from pathlib import Path
+
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+
+def _log(msg):
+    """Print timestamped message to stderr."""
+    ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    print(f"[{ts}] {msg}", file=sys.stderr, flush=True)
+
+
+# ---------------------------------------------------------------------------
+# FASTQ scanning
+# ---------------------------------------------------------------------------
+
+def scan_for_new_fastqs(watch_dir):
+    """Find paired _R1/_R2 .fastq.gz files under *watch_dir* (recursive).
+
+    Groups files by sample ID and returns only complete pairs.
+
+    Returns:
+        list of (sample_id, r1_abs_path, r2_abs_path)
+    """
+    watch = Path(watch_dir)
+    if not watch.is_dir():
+        _log(f"WARNING: watch directory does not exist: {watch_dir}")
+        return []
+
+    # Collect all fastq.gz files
+    r1_files = {}
+    r2_files = {}
+    for fq in watch.rglob('*.fastq.gz'):
+        name = fq.name
+        if '_R1' in name or '_1.fastq' in name:
+            sid = extract_sample_id(name)
+            r1_files[sid] = str(fq.resolve())
+        elif '_R2' in name or '_2.fastq' in name:
+            sid = extract_sample_id(name)
+            r2_files[sid] = str(fq.resolve())
+
+    # Return only complete pairs
+    pairs = []
+    for sid in sorted(r1_files):
+        if sid in r2_files:
+            pairs.append((sid, r1_files[sid], r2_files[sid]))
+    return pairs
+
+
+# ---------------------------------------------------------------------------
+# Sample ID extraction
+# ---------------------------------------------------------------------------
+
+def extract_sample_id(filename, pattern=None):
+    """Extract sample ID from a FASTQ filename.
+
+    If *pattern* is given it must be a regex with one capture group.
+    Otherwise the default strips the read-indicator suffix:
+        everything before ``_R1``, ``_R2``, ``_1.fastq``, or ``_2.fastq``.
+
+    Examples
+    --------
+    >>> extract_sample_id('ID00001_R1.fastq.gz')
+    'ID00001'
+    >>> extract_sample_id('SAMPLE1_R2.fastq.gz')
+    'SAMPLE1'
+    """
+    if pattern:
+        m = re.search(pattern, filename)
+        if m:
+            return m.group(1)
+    # Default: strip read indicator and everything after
+    m = re.match(r'^(.+?)(?:_R[12]|_[12]\.fastq)', filename)
+    if m:
+        return m.group(1)
+    # Fallback: return filename without extension(s)
+    return filename.replace('.fastq.gz', '').replace('.fastq', '')
+
+
+# ---------------------------------------------------------------------------
+# Samplesheet management
+# ---------------------------------------------------------------------------
+
+def update_samplesheet(sheet_path, new_pairs):
+    """Append new pairs to an existing samplesheet CSV.
+
+    The samplesheet has columns: sample, fastq_1, fastq_2.
+    Only pairs whose sample_id is not already present are appended.
+
+    Returns:
+        int — number of samples actually added.
+    """
+    existing_ids = set()
+    rows = []
+
+    if os.path.exists(sheet_path):
+        with open(sheet_path, newline='') as fh:
+            reader = csv.DictReader(fh)
+            for row in reader:
+                existing_ids.add(row['sample'])
+                rows.append(row)
+
+    added = 0
+    for sid, r1, r2 in new_pairs:
+        if sid not in existing_ids:
+            rows.append({'sample': sid, 'fastq_1': r1, 'fastq_2': r2})
+            existing_ids.add(sid)
+            added += 1
+
+    if added > 0:
+        with open(sheet_path, 'w', newline='') as fh:
+            writer = csv.DictWriter(fh, fieldnames=['sample', 'fastq_1', 'fastq_2'])
+            writer.writeheader()
+            writer.writerows(rows)
+
+    return added
+
+
+# ---------------------------------------------------------------------------
+# Cluster detection
+# ---------------------------------------------------------------------------
+
+def detect_new_clusters(prev_pairs_path, curr_pairs_path):
+    """Compare two transmission-pairs TSVs and return newly-appeared pairs.
+
+    Each TSV has columns: sample_1, sample_2, snp_distance.
+
+    Returns:
+        list of dicts with keys sample_1, sample_2, snp_distance.
+    """
+    def _load_pairs(path):
+        pairs = set()
+        if path and os.path.exists(path):
+            with open(path, newline='') as fh:
+                reader = csv.DictReader(fh, delimiter='\t')
+                for row in reader:
+                    key = (row['sample_1'], row['sample_2'])
+                    pairs.add(key)
+        return pairs
+
+    def _load_rows(path):
+        rows = []
+        if path and os.path.exists(path):
+            with open(path, newline='') as fh:
+                reader = csv.DictReader(fh, delimiter='\t')
+                for row in reader:
+                    rows.append(dict(row))
+        return rows
+
+    prev_keys = _load_pairs(prev_pairs_path)
+    curr_rows = _load_rows(curr_pairs_path)
+
+    new = []
+    for row in curr_rows:
+        key = (row['sample_1'], row['sample_2'])
+        if key not in prev_keys:
+            new.append(row)
+    return new
+
+
+# ---------------------------------------------------------------------------
+# Notifications
+# ---------------------------------------------------------------------------
+
+def send_notification(message, targets):
+    """Send *message* to each target in *targets*.
+
+    Supported prefixes:
+        slack:<webhook_url>  — POST JSON to Slack webhook
+        email:<address>      — send via local SMTP (best-effort)
+
+    Falls back to printing to stderr.
+    """
+    if not targets:
+        _log(message)
+        return
+
+    for target in targets:
+        if target.startswith('slack:'):
+            url = target[len('slack:'):]
+            try:
+                data = json.dumps({'text': message}).encode('utf-8')
+                req = urllib.request.Request(
+                    url, data=data,
+                    headers={'Content-Type': 'application/json'},
+                )
+                urllib.request.urlopen(req, timeout=15)
+                _log(f"Slack notification sent to {url[:40]}...")
+            except Exception as exc:
+                _log(f"Slack notification failed: {exc}")
+
+        elif target.startswith('email:'):
+            addr = target[len('email:'):]
+            try:
+                msg = MIMEText(message)
+                msg['Subject'] = 'staphit-watch alert'
+                msg['From'] = 'staphit-watch@localhost'
+                msg['To'] = addr
+                with smtplib.SMTP('localhost') as smtp:
+                    smtp.send_message(msg)
+                _log(f"Email sent to {addr}")
+            except Exception as exc:
+                _log(f"Email notification failed ({addr}): {exc}")
+
+        else:
+            _log(f"Unknown notification target: {target}")
+
+    # Always log to stderr as well
+    _log(message)
+
+
+# ---------------------------------------------------------------------------
+# Pipeline execution
+# ---------------------------------------------------------------------------
+
+def run_pipeline(extra_args=None, dry_run=False):
+    """Run ``nextflow run main.nf -resume`` with optional extra arguments.
+
+    Returns:
+        bool — True if the pipeline exited 0.
+    """
+    cmd = ['nextflow', 'run', 'main.nf', '-resume']
+    if extra_args:
+        cmd.extend(extra_args)
+
+    _log(f"Pipeline command: {' '.join(cmd)}")
+    if dry_run:
+        _log("DRY-RUN: skipping pipeline execution")
+        return True
+
+    result = subprocess.run(cmd)
+    return result.returncode == 0
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(
+        description='Monitor a directory for new FASTQ pairs and trigger Staphit pipeline runs.',
+    )
+    parser.add_argument('--watch-dir', required=True,
+                        help='Directory to monitor for .fastq.gz files')
+    parser.add_argument('--samplesheet', required=True,
+                        help='Path to samplesheet.csv (will be created if absent)')
+    parser.add_argument('--interval', type=int, default=60,
+                        help='Polling interval in minutes (default: 60)')
+    parser.add_argument('--notify', action='append', default=[],
+                        help='Notification target (repeatable): slack:<url> or email:<addr>')
+    parser.add_argument('--once', action='store_true',
+                        help='Run one scan cycle and exit')
+    parser.add_argument('--id-pattern', default=None,
+                        help='Regex with one capture group for sample ID extraction')
+    parser.add_argument('--dry-run', action='store_true',
+                        help='Detect new samples but do not run the pipeline')
+
+    args, extra = parser.parse_known_args(argv)
+    # Strip leading '--' separator if present
+    if extra and extra[0] == '--':
+        extra = extra[1:]
+
+    _log(f"Watching {args.watch_dir} every {args.interval}m")
+
+    while True:
+        # 1. Scan
+        pairs = scan_for_new_fastqs(args.watch_dir)
+        _log(f"Found {len(pairs)} complete FASTQ pair(s)")
+
+        # 2. Filter to pairs not already in samplesheet
+        existing_ids = set()
+        if os.path.exists(args.samplesheet):
+            with open(args.samplesheet, newline='') as fh:
+                reader = csv.DictReader(fh)
+                for row in reader:
+                    existing_ids.add(row['sample'])
+
+        # Re-extract sample IDs using custom pattern if provided
+        if args.id_pattern:
+            pairs = [
+                (extract_sample_id(os.path.basename(r1), pattern=args.id_pattern), r1, r2)
+                for (_, r1, r2) in pairs
+            ]
+
+        new_pairs = [(sid, r1, r2) for (sid, r1, r2) in pairs if sid not in existing_ids]
+        _log(f"New samples: {len(new_pairs)}")
+
+        if new_pairs:
+            # 3. Backup transmission_pairs.tsv if it exists
+            tp_path = os.path.join(os.path.dirname(args.samplesheet), 'transmission_pairs.tsv')
+            tp_backup = None
+            if os.path.exists(tp_path):
+                tp_backup = tp_path + '.prev'
+                shutil.copy2(tp_path, tp_backup)
+                _log(f"Backed up {tp_path} → {tp_backup}")
+
+            # Update samplesheet
+            added = update_samplesheet(args.samplesheet, new_pairs)
+            _log(f"Added {added} sample(s) to {args.samplesheet}")
+            sample_names = [sid for sid, _, _ in new_pairs]
+            send_notification(
+                f"staphit-watch: added {added} new sample(s): {', '.join(sample_names)}",
+                args.notify,
+            )
+
+            # 4. Run pipeline
+            success = run_pipeline(extra_args=extra or None, dry_run=args.dry_run)
+            if success:
+                _log("Pipeline completed successfully")
+            else:
+                _log("WARNING: pipeline exited with non-zero status")
+                send_notification("staphit-watch: pipeline FAILED", args.notify)
+
+            # 5. Detect new clusters
+            if not args.dry_run and tp_backup and os.path.exists(tp_path):
+                new_clusters = detect_new_clusters(tp_backup, tp_path)
+                if new_clusters:
+                    cluster_msg = (
+                        f"staphit-watch: {len(new_clusters)} new transmission pair(s) detected:\n"
+                        + '\n'.join(
+                            f"  {c['sample_1']} ↔ {c['sample_2']} ({c['snp_distance']} SNPs)"
+                            for c in new_clusters
+                        )
+                    )
+                    send_notification(cluster_msg, args.notify)
+                else:
+                    _log("No new transmission pairs detected")
+        else:
+            _log("No new samples — sleeping")
+
+        # 6. Exit or sleep
+        if args.once:
+            break
+        _log(f"Sleeping {args.interval} minutes...")
+        time.sleep(args.interval * 60)
+
+
+if __name__ == '__main__':
+    main()

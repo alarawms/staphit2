@@ -1,0 +1,192 @@
+#!/usr/bin/env python3
+"""staphit-plasmids: parse MOB-suite output into structured plasmid profiles."""
+import argparse
+import csv
+import json
+import sys
+
+
+# ---------------------------------------------------------------------------
+# Parsers
+# ---------------------------------------------------------------------------
+
+def parse_contig_report(path):
+    """Read MOB-suite contig_report.txt (TSV).
+
+    Returns:
+        (chromosome_contigs, plasmid_contigs) where each is a list of row dicts.
+        Key columns: sample_id, molecule_type, primary_cluster_id, contig_id,
+        size, rep_type(s), predicted_mobility.
+    """
+    chromosome_contigs = []
+    plasmid_contigs = []
+    with open(path, newline='') as fh:
+        reader = csv.DictReader(fh, delimiter='\t')
+        for row in reader:
+            if row.get('molecule_type', '').lower() == 'chromosome':
+                chromosome_contigs.append(row)
+            else:
+                plasmid_contigs.append(row)
+    return chromosome_contigs, plasmid_contigs
+
+
+def parse_mobtyper(path):
+    """Read mobtyper_results.txt (TSV).
+
+    The sample_id column has format "SAMPLE:CLUSTER" -- split on ':' to get
+    cluster_id.
+
+    Returns:
+        dict of cluster_id -> {size: int, mobility: str, rep_types: list,
+        host_range: str, num_contigs: int}
+    """
+    results = {}
+    with open(path, newline='') as fh:
+        reader = csv.DictReader(fh, delimiter='\t')
+        for row in reader:
+            sample_id = row.get('sample_id', '')
+            # Format is "SAMPLE:CLUSTER"
+            parts = sample_id.split(':')
+            cluster_id = parts[-1] if len(parts) > 1 else parts[0]
+
+            rep_types_raw = row.get('rep_type(s)', row.get('rep_types', ''))
+            rep_types = [r for r in rep_types_raw.split(',') if r and r != '-']
+
+            size = int(row.get('size', 0))
+            mobility = row.get('predicted_mobility', row.get('mobility', ''))
+            host_range = row.get('host_range', '')
+            num_contigs = int(row.get('num_contigs', 1))
+
+            results[cluster_id] = {
+                'size': size,
+                'mobility': mobility,
+                'rep_types': rep_types,
+                'host_range': host_range,
+                'num_contigs': num_contigs,
+            }
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Profile building
+# ---------------------------------------------------------------------------
+
+def build_plasmid_profile(contig_report_path, mobtyper_path):
+    """Combine contig_report and mobtyper results into a unified profile.
+
+    Returns:
+        {
+            'plasmid_count': int,
+            'plasmids': [
+                {'cluster_id': 'AA411', 'size': 24000, 'mobility': 'mobilizable',
+                 'rep_types': ['rep16'], 'host_range': 'Staphylococcus',
+                 'num_contigs': 5},
+                ...
+            ],
+            'contig_map': {'contig_1': 'chromosome', 'contig_2': 'AA411', ...},
+            '_summary': 'AA411:mobilizable(rep16);AE018:non-mobilizable'
+        }
+    """
+    chromosome_contigs, plasmid_contigs = parse_contig_report(contig_report_path)
+    mobtyper_data = parse_mobtyper(mobtyper_path)
+
+    # Build contig_map
+    contig_map = {}
+    for row in chromosome_contigs:
+        contig_id = row.get('contig_id', '')
+        if contig_id:
+            contig_map[contig_id] = 'chromosome'
+    for row in plasmid_contigs:
+        contig_id = row.get('contig_id', '')
+        cluster_id = row.get('primary_cluster_id', '')
+        if contig_id:
+            contig_map[contig_id] = cluster_id if cluster_id else 'unknown_plasmid'
+
+    # Build plasmids list from mobtyper data
+    plasmids = []
+    for cluster_id, info in sorted(mobtyper_data.items()):
+        plasmids.append({
+            'cluster_id': cluster_id,
+            'size': info['size'],
+            'mobility': info['mobility'],
+            'rep_types': info['rep_types'],
+            'host_range': info['host_range'],
+            'num_contigs': info['num_contigs'],
+        })
+
+    profile = {
+        'plasmid_count': len(plasmids),
+        'plasmids': plasmids,
+        'contig_map': contig_map,
+    }
+    profile['_summary'] = format_plasmid_summary(profile)
+    return profile
+
+
+# ---------------------------------------------------------------------------
+# Gene location assignment
+# ---------------------------------------------------------------------------
+
+def assign_genes_to_locations(gene_list, contig_map):
+    """Map each gene to its genomic location (chromosome or plasmid cluster).
+
+    Args:
+        gene_list: list of dicts with 'gene' and 'contig' keys.
+        contig_map: dict of contig_id -> location from build_plasmid_profile.
+
+    Returns:
+        dict of gene_name -> location ('chromosome' or cluster_id).
+    """
+    assignments = {}
+    for entry in gene_list:
+        gene = entry['gene']
+        contig = entry['contig']
+        location = contig_map.get(contig, 'unknown')
+        assignments[gene] = location
+    return assignments
+
+
+# ---------------------------------------------------------------------------
+# Summary formatting
+# ---------------------------------------------------------------------------
+
+def format_plasmid_summary(profile):
+    """One-line summary: cluster:mobility(replicon) for each plasmid.
+
+    Empty replicon omits parens.
+    Example: "AA411:mobilizable(rep16);AE018:non-mobilizable"
+    """
+    parts = []
+    for p in profile['plasmids']:
+        rep_str = ','.join(p['rep_types'])
+        if rep_str:
+            parts.append(f"{p['cluster_id']}:{p['mobility']}({rep_str})")
+        else:
+            parts.append(f"{p['cluster_id']}:{p['mobility']}")
+    return ';'.join(parts)
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='Parse MOB-suite output into structured plasmid profiles.'
+    )
+    parser.add_argument('--contig-report', required=True,
+                        help='MOB-suite contig_report.txt file')
+    parser.add_argument('--mobtyper', required=True,
+                        help='MOB-suite mobtyper_results.txt file')
+    parser.add_argument('-o', '--output', help='Output JSON file (default: stdout)')
+    args = parser.parse_args()
+
+    profile = build_plasmid_profile(args.contig_report, args.mobtyper)
+
+    out_path = args.output or '/dev/stdout'
+    with open(out_path, 'w') as f:
+        json.dump(profile, f, indent=2)
+
+
+if __name__ == '__main__':
+    main()

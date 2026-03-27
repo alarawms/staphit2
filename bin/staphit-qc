@@ -1,0 +1,171 @@
+#!/usr/bin/env python3
+"""staphit-qc: CheckM2-based assembly quality gate for the Staphit pipeline."""
+import argparse
+import csv
+import os
+import re
+import sys
+
+
+# ---------------------------------------------------------------------------
+# Parsing
+# ---------------------------------------------------------------------------
+
+def parse_checkm2_report(tsv_path):
+    """Parse a CheckM2 quality_report.tsv file.
+
+    Strips common assembly suffixes (.scaffolds, .fasta, .fa, .contigs) from
+    the Name column to recover the sample_id.
+
+    Returns a list of dicts with keys:
+        sample_id, completeness, contamination, genome_size, gc, n50
+    """
+    results = []
+    with open(tsv_path, newline='') as fh:
+        reader = csv.DictReader(fh, delimiter='\t')
+        for row in reader:
+            name = row['Name']
+            # Strip common assembly suffixes
+            sample_id = re.sub(
+                r'\.(scaffolds|fasta|fa|contigs)$', '', name
+            )
+            results.append({
+                'sample_id': sample_id,
+                'completeness': float(row['Completeness']),
+                'contamination': float(row['Contamination']),
+                'genome_size': int(row.get('Genome_Size', 0)),
+                'gc': float(row.get('GC_Content', 0)),
+                'n50': int(row.get('N50', 0)),
+            })
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Assessment
+# ---------------------------------------------------------------------------
+
+def assess_quality(sample, min_completeness=90, max_contamination=5):
+    """Assess whether a sample passes QC thresholds.
+
+    Parameters
+    ----------
+    sample : dict
+        Must contain at least 'sample_id', 'completeness', 'contamination'.
+    min_completeness : float
+        Minimum completeness percentage to pass.
+    max_contamination : float
+        Maximum contamination percentage to pass.
+
+    Returns
+    -------
+    dict with keys: sample_id, pass, reason, completeness, contamination
+    """
+    reasons = []
+    if sample['completeness'] < min_completeness:
+        reasons.append(
+            f"completeness {sample['completeness']:.1f}% < {min_completeness}%"
+        )
+    if sample['contamination'] > max_contamination:
+        reasons.append(
+            f"contamination {sample['contamination']:.1f}% > {max_contamination}%"
+        )
+
+    passed = len(reasons) == 0
+    return {
+        'sample_id': sample['sample_id'],
+        'pass': passed,
+        'reason': '; '.join(reasons) if reasons else 'OK',
+        'completeness': sample['completeness'],
+        'contamination': sample['contamination'],
+    }
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(
+        description='Assess assembly quality from CheckM2 reports.'
+    )
+    parser.add_argument(
+        '--checkm2-dir', required=True,
+        help='Directory to walk for quality_report.tsv files.',
+    )
+    parser.add_argument(
+        '--min-completeness', type=float, default=90,
+        help='Minimum completeness percentage (default: 90).',
+    )
+    parser.add_argument(
+        '--max-contamination', type=float, default=5,
+        help='Maximum contamination percentage (default: 5).',
+    )
+    parser.add_argument(
+        '-o', '--outdir', required=True,
+        help='Output directory for report files.',
+    )
+    args = parser.parse_args(argv)
+
+    # Discover all quality_report.tsv files
+    report_files = []
+    for root, _dirs, files in os.walk(args.checkm2_dir):
+        for f in files:
+            if f.endswith('quality_report.tsv'):
+                report_files.append(os.path.join(root, f))
+
+    if not report_files:
+        print(
+            f"WARNING: no quality_report.tsv files found under {args.checkm2_dir}",
+            file=sys.stderr,
+        )
+
+    # Parse and assess
+    all_samples = []
+    for rpt in sorted(report_files):
+        all_samples.extend(parse_checkm2_report(rpt))
+
+    assessments = [
+        assess_quality(s, args.min_completeness, args.max_contamination)
+        for s in all_samples
+    ]
+
+    os.makedirs(args.outdir, exist_ok=True)
+
+    # Write qc_report.tsv
+    report_path = os.path.join(args.outdir, 'qc_report.tsv')
+    with open(report_path, 'w', newline='') as fh:
+        writer = csv.DictWriter(
+            fh,
+            fieldnames=['sample_id', 'pass', 'reason', 'completeness', 'contamination'],
+            delimiter='\t',
+        )
+        writer.writeheader()
+        for a in assessments:
+            row = dict(a)
+            row['pass'] = 'PASS' if row['pass'] else 'FAIL'
+            writer.writerow(row)
+
+    # Write passed / failed sample lists
+    passed_path = os.path.join(args.outdir, 'passed_samples.txt')
+    failed_path = os.path.join(args.outdir, 'failed_samples.txt')
+
+    with open(passed_path, 'w') as fh:
+        for a in assessments:
+            if a['pass']:
+                fh.write(a['sample_id'] + '\n')
+
+    with open(failed_path, 'w') as fh:
+        for a in assessments:
+            if not a['pass']:
+                fh.write(a['sample_id'] + '\n')
+
+    # Summary to stdout
+    n_pass = sum(1 for a in assessments if a['pass'])
+    n_fail = len(assessments) - n_pass
+    print(f"QC gate: {n_pass} passed, {n_fail} failed out of {len(assessments)} samples")
+
+    return 0 if n_fail == 0 else 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())

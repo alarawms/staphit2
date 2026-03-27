@@ -1,0 +1,405 @@
+#!/usr/bin/env python3
+"""staphit-cluster: outbreak clustering with tiered SNP/cgMLST thresholds."""
+import argparse
+import csv
+import json
+import os
+import sys
+from collections import defaultdict
+
+# ---------------------------------------------------------------------------
+# Distance matrix parsing
+# ---------------------------------------------------------------------------
+
+
+def parse_distance_matrix(path):
+    """Parse a square distance matrix TSV (snp-dists format).
+
+    The first cell may contain a tool name like "snp-dists 0.8.2" instead of
+    a sample name. Returns dict of (s1, s2) -> int, symmetric, excluding
+    self-comparisons.
+    """
+    with open(path, newline='') as fh:
+        reader = csv.reader(fh, delimiter='\t')
+        header = next(reader)
+        # First cell might be tool name or empty; sample names start at index 1
+        # Detect: if header[0] looks like a tool name (contains space) or is
+        # empty, samples are header[1:]. Otherwise header[0] is also a sample.
+        if header[0] == '' or ' ' in header[0]:
+            col_samples = header[1:]
+        else:
+            col_samples = header[1:]
+
+        matrix = {}
+        samples = []
+        for row in reader:
+            row_sample = row[0]
+            samples.append(row_sample)
+            for i, col_sample in enumerate(col_samples):
+                dist = int(row[i + 1])
+                if row_sample != col_sample:
+                    matrix[(row_sample, col_sample)] = dist
+    return matrix, samples
+
+
+# ---------------------------------------------------------------------------
+# Union-Find clustering
+# ---------------------------------------------------------------------------
+
+
+class _UnionFind:
+    """Simple union-find (disjoint set) data structure."""
+
+    def __init__(self, elements):
+        self.parent = {e: e for e in elements}
+        self.rank = {e: 0 for e in elements}
+
+    def find(self, x):
+        while self.parent[x] != x:
+            self.parent[x] = self.parent[self.parent[x]]
+            x = self.parent[x]
+        return x
+
+    def union(self, x, y):
+        rx, ry = self.find(x), self.find(y)
+        if rx == ry:
+            return
+        if self.rank[rx] < self.rank[ry]:
+            rx, ry = ry, rx
+        self.parent[ry] = rx
+        if self.rank[rx] == self.rank[ry]:
+            self.rank[rx] += 1
+
+
+def cluster_at_threshold(matrix, samples, threshold):
+    """Single-linkage clustering via union-find.
+
+    Returns dict of sample -> cluster_id (format "C0001", "C0002", ...).
+    """
+    uf = _UnionFind(samples)
+    seen = set()
+    for (s1, s2), dist in matrix.items():
+        pair = tuple(sorted((s1, s2)))
+        if pair in seen:
+            continue
+        seen.add(pair)
+        if dist <= threshold:
+            uf.union(s1, s2)
+
+    # Map roots to cluster IDs
+    root_to_id = {}
+    counter = 0
+    result = {}
+    for s in sorted(samples):
+        root = uf.find(s)
+        if root not in root_to_id:
+            counter += 1
+            root_to_id[root] = f"C{counter:04d}"
+        result[s] = root_to_id[root]
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Tiered clustering
+# ---------------------------------------------------------------------------
+
+
+def assign_tiered_clusters(matrix, samples, thresholds):
+    """Return list of cluster dicts, one per threshold."""
+    return [cluster_at_threshold(matrix, samples, t) for t in thresholds]
+
+
+# ---------------------------------------------------------------------------
+# Merge SNP + cgMLST clusters
+# ---------------------------------------------------------------------------
+
+_TIER_NAMES = ['direct_transmission', 'outbreak', 'related']
+_TIER_PREFIXES = {'direct_transmission': 'DT-', 'outbreak': 'OB-', 'related': 'RL-'}
+
+
+def merge_cluster_assignments(snp_tiers, cgmlst_tiers, snp_thresholds,
+                              cgmlst_thresholds, samples):
+    """Merge SNP and cgMLST tier assignments with OR logic.
+
+    Two samples are in the same merged cluster if they share a cluster in
+    EITHER the SNP tier OR the cgMLST tier at the corresponding level.
+
+    Returns dict of tier_name -> {sample -> cluster_id} with prefixed IDs.
+    """
+    merged = {}
+    for idx, tier_name in enumerate(_TIER_NAMES):
+        snp_clusters = snp_tiers[idx] if idx < len(snp_tiers) else {}
+        cgmlst_clusters = cgmlst_tiers[idx] if idx < len(cgmlst_tiers) else {}
+
+        # Build union-find: merge if same SNP cluster OR same cgMLST cluster
+        uf = _UnionFind(samples)
+
+        # Group by SNP cluster
+        snp_groups = defaultdict(list)
+        for s, cid in snp_clusters.items():
+            snp_groups[cid].append(s)
+        for members in snp_groups.values():
+            for i in range(1, len(members)):
+                uf.union(members[0], members[i])
+
+        # Group by cgMLST cluster
+        cg_groups = defaultdict(list)
+        for s, cid in cgmlst_clusters.items():
+            cg_groups[cid].append(s)
+        for members in cg_groups.values():
+            for i in range(1, len(members)):
+                uf.union(members[0], members[i])
+
+        # Assign prefixed IDs
+        prefix = _TIER_PREFIXES[tier_name]
+        root_to_id = {}
+        counter = 0
+        result = {}
+        for s in sorted(samples):
+            root = uf.find(s)
+            if root not in root_to_id:
+                counter += 1
+                root_to_id[root] = f"{prefix}{counter:04d}"
+            result[s] = root_to_id[root]
+        merged[tier_name] = result
+
+    return merged
+
+
+# ---------------------------------------------------------------------------
+# Cluster report
+# ---------------------------------------------------------------------------
+
+
+def build_cluster_report(merged, summary_data, snp_matrix):
+    """Build a report for each multi-sample cluster.
+
+    For each cluster with >1 sample: date_range, locations,
+    shared_st, shared_spa, shared_resistance (from amrfinder_genes),
+    max_snp_distance.
+    """
+    # Index summary_data by sample_id
+    summary_by_id = {}
+    if summary_data:
+        for row in summary_data:
+            summary_by_id[row.get('sample_id', '')] = row
+
+    reports = []
+    for tier_name, assignments in merged.items():
+        # Group samples by cluster
+        groups = defaultdict(list)
+        for sample, cid in assignments.items():
+            groups[cid].append(sample)
+
+        for cid, members in sorted(groups.items()):
+            if len(members) < 2:
+                continue
+
+            cluster_info = {
+                'tier': tier_name,
+                'cluster_id': cid,
+                'samples': sorted(members),
+                'n_samples': len(members),
+            }
+
+            # Gather metadata
+            dates = []
+            locations = set()
+            sts = set()
+            spas = set()
+            resistance_sets = []
+
+            for s in members:
+                info = summary_by_id.get(s, {})
+                if info.get('collection_date'):
+                    dates.append(info['collection_date'])
+                if info.get('location'):
+                    locations.add(info['location'])
+                if info.get('st'):
+                    sts.add(info['st'])
+                if info.get('spa_type'):
+                    spas.add(info['spa_type'])
+                if info.get('amrfinder_genes'):
+                    genes = set(info['amrfinder_genes'].split(';'))
+                    resistance_sets.append(genes)
+
+            if dates:
+                cluster_info['date_range'] = [min(dates), max(dates)]
+            else:
+                cluster_info['date_range'] = []
+
+            cluster_info['locations'] = sorted(locations)
+            cluster_info['shared_st'] = sorted(sts)[0] if len(sts) == 1 else None
+            cluster_info['shared_spa'] = sorted(spas)[0] if len(spas) == 1 else None
+
+            if resistance_sets:
+                shared = resistance_sets[0]
+                for rs in resistance_sets[1:]:
+                    shared = shared & rs
+                cluster_info['shared_resistance'] = sorted(shared - {''})
+            else:
+                cluster_info['shared_resistance'] = []
+
+            # Max SNP distance within cluster
+            max_dist = 0
+            for i, s1 in enumerate(members):
+                for s2 in members[i + 1:]:
+                    d = snp_matrix.get((s1, s2), snp_matrix.get((s2, s1), 0))
+                    max_dist = max(max_dist, d)
+            cluster_info['max_snp_distance'] = max_dist
+
+            reports.append(cluster_info)
+
+    return reports
+
+
+# ---------------------------------------------------------------------------
+# Transmission pairs
+# ---------------------------------------------------------------------------
+
+
+def find_transmission_pairs(snp_matrix, threshold, summary_data):
+    """Find all pairs with SNP distance <= threshold.
+
+    Returns list of dicts with pair info and same_st, same_spa, same_location.
+    """
+    summary_by_id = {}
+    if summary_data:
+        for row in summary_data:
+            summary_by_id[row.get('sample_id', '')] = row
+
+    pairs = []
+    seen = set()
+    for (s1, s2), dist in snp_matrix.items():
+        pair = tuple(sorted((s1, s2)))
+        if pair in seen:
+            continue
+        seen.add(pair)
+        if dist > threshold:
+            continue
+
+        info1 = summary_by_id.get(s1, {})
+        info2 = summary_by_id.get(s2, {})
+
+        same_st = bool(info1.get('st') and info2.get('st')
+                       and info1['st'] == info2['st'])
+        same_spa = bool(info1.get('spa_type') and info2.get('spa_type')
+                        and info1['spa_type'] == info2['spa_type'])
+        same_location = bool(info1.get('location') and info2.get('location')
+                             and info1['location'] == info2['location'])
+
+        pairs.append({
+            'sample_1': pair[0],
+            'sample_2': pair[1],
+            'snp_distance': dist,
+            'same_st': same_st,
+            'same_spa': same_spa,
+            'same_location': same_location,
+        })
+
+    return sorted(pairs, key=lambda p: (p['snp_distance'], p['sample_1'], p['sample_2']))
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+
+def _load_summary(path):
+    """Load a final_summary.tsv and return list of dicts."""
+    with open(path, newline='') as fh:
+        reader = csv.DictReader(fh, delimiter='\t')
+        return list(reader)
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='Outbreak clustering with tiered SNP/cgMLST thresholds',
+    )
+    parser.add_argument('--snp-dists', required=True,
+                        help='SNP distance matrix TSV (snp-dists format)')
+    parser.add_argument('--cgmlst-dists',
+                        help='cgMLST distance matrix TSV')
+    parser.add_argument('--summary',
+                        help='final_summary.tsv with sample metadata')
+    parser.add_argument('--snp-tiers', default='5,15,40',
+                        help='Comma-separated SNP thresholds (default: 5,15,40)')
+    parser.add_argument('--cgmlst-tiers', default='10,24,50',
+                        help='Comma-separated cgMLST thresholds (default: 10,24,50)')
+    parser.add_argument('-o', '--output', required=True,
+                        help='Output directory')
+    args = parser.parse_args()
+
+    snp_thresholds = [int(x) for x in args.snp_tiers.split(',')]
+    cgmlst_thresholds = [int(x) for x in args.cgmlst_tiers.split(',')]
+
+    # Parse distance matrices
+    snp_matrix, snp_samples = parse_distance_matrix(args.snp_dists)
+
+    if args.cgmlst_dists:
+        cgmlst_matrix, cgmlst_samples = parse_distance_matrix(args.cgmlst_dists)
+    else:
+        cgmlst_matrix = {}
+        cgmlst_samples = snp_samples
+
+    # All samples (union)
+    all_samples = sorted(set(snp_samples) | set(cgmlst_samples))
+
+    # Tiered clustering
+    snp_tiers = assign_tiered_clusters(snp_matrix, all_samples, snp_thresholds)
+    cgmlst_tiers = assign_tiered_clusters(cgmlst_matrix, all_samples, cgmlst_thresholds)
+
+    # Merge
+    merged = merge_cluster_assignments(snp_tiers, cgmlst_tiers,
+                                       snp_thresholds, cgmlst_thresholds,
+                                       all_samples)
+
+    # Load summary if provided
+    summary_data = _load_summary(args.summary) if args.summary else []
+
+    # Build report
+    report = build_cluster_report(merged, summary_data, snp_matrix)
+
+    # Transmission pairs (using first SNP threshold = direct transmission)
+    pairs = find_transmission_pairs(snp_matrix, snp_thresholds[0], summary_data)
+
+    # Write outputs
+    os.makedirs(args.output, exist_ok=True)
+
+    # clusters.tsv - one row per sample with tier assignments
+    clusters_path = os.path.join(args.output, 'clusters.tsv')
+    with open(clusters_path, 'w', newline='') as fh:
+        fieldnames = ['sample_id'] + [f'{t}_cluster' for t in _TIER_NAMES]
+        writer = csv.DictWriter(fh, fieldnames=fieldnames,
+                                delimiter='\t', lineterminator='\n')
+        writer.writeheader()
+        for s in all_samples:
+            row = {'sample_id': s}
+            for tier_name in _TIER_NAMES:
+                row[f'{tier_name}_cluster'] = merged[tier_name].get(s, '')
+            writer.writerow(row)
+
+    # cluster_report.json
+    report_path = os.path.join(args.output, 'cluster_report.json')
+    with open(report_path, 'w') as fh:
+        json.dump(report, fh, indent=2)
+        fh.write('\n')
+
+    # transmission_pairs.tsv
+    pairs_path = os.path.join(args.output, 'transmission_pairs.tsv')
+    with open(pairs_path, 'w', newline='') as fh:
+        fieldnames = ['sample_1', 'sample_2', 'snp_distance',
+                      'same_st', 'same_spa', 'same_location']
+        writer = csv.DictWriter(fh, fieldnames=fieldnames,
+                                delimiter='\t', lineterminator='\n')
+        writer.writeheader()
+        for p in pairs:
+            writer.writerow(p)
+
+    print(f"Wrote {clusters_path}", file=sys.stderr)
+    print(f"Wrote {report_path}", file=sys.stderr)
+    print(f"Wrote {pairs_path}", file=sys.stderr)
+
+
+if __name__ == '__main__':
+    main()
