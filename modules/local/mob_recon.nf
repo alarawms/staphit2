@@ -1,6 +1,8 @@
 process MOB_RECON {
     tag "$meta.id"
     label 'process_medium'
+    errorStrategy { task.exitStatus in [125,137] ? 'retry' : 'terminate' }
+    maxRetries 2
     container 'docker.io/staphb/mob-suite:latest'
 
     input:

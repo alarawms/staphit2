@@ -1,6 +1,8 @@
 process AGR_TYPING {
     tag "$meta.id"
     label 'process_low'
+    errorStrategy { task.exitStatus in [125,137] ? 'retry' : 'terminate' }
+    maxRetries 2
     container 'docker.io/alarawms/staph_agr_typer:latest'
 
     input:
