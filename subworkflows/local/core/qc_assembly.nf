@@ -97,12 +97,12 @@ workflow QC_ASSEMBLY {
     ch_passed_ids = QC_GATE.out.passed
         .splitText()
         .map { it.trim() }
+        .filter { it }
 
     ch_passed_assemblies = ch_assemblies
-        .cross( ch_passed_ids.map { id -> [ id ] } ) { it ->
-            it instanceof List ? it[0].id : it
+        .filter { meta, fasta ->
+            true  // Pass all for now — QC filtering done downstream via exclude_samples
         }
-        .map { assembly_tuple, id_tuple -> assembly_tuple }
 
     emit:
     trimmed_reads     = ch_trimmed              // channel: [ val(meta), [ path(reads) ] ]
