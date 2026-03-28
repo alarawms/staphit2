@@ -55,7 +55,7 @@ workflow PHYLOGENY {
         // IQTREE nf-core module: tuple(meta, alignment, tree) + 11 optional path args
         IQTREE (
             ch_core_aln.map { aln -> [ [id: 'core'], aln, [] ] },
-            [], [], [], [], [], [], [], [], [], []
+            [], [], [], [], [], [], [], [], [], [], [], []
         )
         ch_tree = IQTREE.out.phylogeny
         ch_versions = ch_versions.mix(IQTREE.out.versions.first())
