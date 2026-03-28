@@ -4,6 +4,7 @@ process AGR_TYPING {
     errorStrategy { task.exitStatus in [125,137] ? 'retry' : 'terminate' }
     maxRetries 2
     container 'docker.io/alarawms/staph_agr_typer:latest'
+    containerOptions '--entrypoint ""'
 
     input:
     tuple val(meta), path(assembly)
