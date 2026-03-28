@@ -13,6 +13,8 @@ process AGR_TYPING {
 
     script:
     """
-    agr_typer ${assembly} > ${meta.id}_agr.json 2>/dev/null || echo '{"agr_group": "ND", "confidence": 0.0}' > ${meta.id}_agr.json
+    staph_agr_typer run --fasta ${assembly} -o agr_out 2>/dev/null && \
+        cp agr_out/*.json ${meta.id}_agr.json 2>/dev/null || \
+        echo '{"agr_group": "ND", "confidence": 0.0}' > ${meta.id}_agr.json
     """
 }
