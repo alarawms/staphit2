@@ -2,12 +2,12 @@
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     PLASMID ANALYSIS SUBWORKFLOW
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    MOB-suite reconstruction -> per-sample contig/mobtyper reports -> summary
+    MOB-suite DB init -> reconstruction -> summary
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
 
-include { MOB_RECON       } from '../../../modules/local/mob_recon'
-include { PLASMID_SUMMARY } from '../../../modules/local/plasmid_summary'
+include { MOB_INIT; MOB_RECON } from '../../../modules/local/mob_recon'
+include { PLASMID_SUMMARY     } from '../../../modules/local/plasmid_summary'
 
 workflow PLASMID_ANALYSIS {
 
@@ -16,7 +16,11 @@ workflow PLASMID_ANALYSIS {
 
     main:
 
-    MOB_RECON ( ch_assemblies )
+    // Download and initialize MOB-suite databases (once)
+    MOB_INIT ()
+
+    // Per-sample plasmid reconstruction
+    MOB_RECON ( ch_assemblies, MOB_INIT.out.db.collect() )
 
     PLASMID_SUMMARY (
         MOB_RECON.out.full_output.map { meta, dir -> dir }.collect()

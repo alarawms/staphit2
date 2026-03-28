@@ -1,8 +1,8 @@
 process SCCMEC {
     tag "$meta.id"
     label 'process_low'
-    errorStrategy 'ignore'
     container 'docker.io/alarawms/sccmec_typer:latest'
+    containerOptions '--entrypoint ""'
 
     input:
     tuple val(meta), path(assembly)
@@ -12,6 +12,8 @@ process SCCMEC {
 
     script:
     """
-    sccmec_typer.py --1 ${assembly} -d /opt/conda/share/sccmec_db -o ${meta.id}_sccmec.tsv 2>/dev/null || echo -e "sample_id\\tSCCmec_Type\\n${meta.id}\\tND" > ${meta.id}_sccmec.tsv
+    python3 /app/bin/sccmec_typer.py --1 ${assembly} -d /app/db -o ${meta.id}_sccmec --no-viz 2>/dev/null && \
+        mv ${meta.id}_sccmec.tsv ${meta.id}_sccmec.tsv 2>/dev/null || \
+        echo -e "Sample\\tStatus\\tmecA_Present\\tSCCmec_Type\\n${meta.id}\\tND\\tND\\tND" > ${meta.id}_sccmec.tsv
     """
 }

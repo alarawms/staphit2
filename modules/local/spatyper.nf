@@ -1,8 +1,7 @@
 process SPATYPER {
     tag "$meta.id"
     label 'process_low'
-    errorStrategy 'ignore'
-    container 'docker.io/staphb/spatyper:latest'
+    container 'quay.io/biocontainers/spatyper:0.3.3--pyhdfd78af_3'
 
     input:
     tuple val(meta), path(assembly)
