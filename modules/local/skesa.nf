@@ -7,7 +7,7 @@ process SKESA {
     tuple val(meta), path(reads)
 
     output:
-    tuple val(meta), path("*.scaffolds.fasta"), emit: scaffolds
+    tuple val(meta), path("${meta.id}.scaffolds.fasta"), emit: scaffolds
 
     script:
     """
