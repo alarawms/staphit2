@@ -7,6 +7,7 @@
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
 
+include { AMRFINDERPLUS_UPDATE        } from '../../../modules/nf-core/amrfinderplus/update/main'
 include { AMRFINDERPLUS_RUN           } from '../../../modules/nf-core/amrfinderplus/run/main'
 include { ABRICATE_MULTI              } from '../../../modules/local/abricate_multi'
 include { FETCH_RESFINDER_DB; INDEX_DB; KMA } from '../../../modules/local/kma'
@@ -25,9 +26,12 @@ workflow AMR_DETECTION {
     // Add organism to meta for AMRFinderPlus and ensure single file
     ch_amr_input = ch_assemblies.map { meta, fasta ->
         def new_meta = meta + [organism: 'Staphylococcus_aureus']
-        [ new_meta, fasta instanceof List ? fasta[0] : fasta ]
+        def single_fasta = fasta instanceof List ? fasta[0] : fasta
+        [ new_meta, single_fasta ]
     }
-    AMRFINDERPLUS_RUN ( ch_amr_input, [] )
+    // Download AMRFinderPlus database, then run
+    AMRFINDERPLUS_UPDATE ()
+    AMRFINDERPLUS_RUN ( ch_amr_input, AMRFINDERPLUS_UPDATE.out.db )
 
     //
     // Assembly-based screening with ABRicate (resfinder + vfdb + plasmidfinder)

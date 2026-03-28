@@ -15,6 +15,11 @@
                         "git_sha": "9e87466af165c7fa800d7805a227249829d911c2",
                         "installed_by": ["modules"]
                     },
+                    "amrfinderplus/update": {
+                        "branch": "master",
+                        "git_sha": "9e87466af165c7fa800d7805a227249829d911c2",
+                        "installed_by": ["modules"]
+                    },
                     "fastqc": {
                         "branch": "master",
                         "git_sha": "41dfa3f7c0ffabb96a6a813fe321c6d1cc5b6e46",
