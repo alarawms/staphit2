@@ -1,20 +1,32 @@
 process FETCH_RESFINDER_DB {
     label 'process_low'
-    container 'staphb/kma:1.4.14'
-    storeDir "${params.outdir}/databases/resfinder"
+    container 'docker.io/python:3.9'
 
     output:
     path "resfinder_db", emit: db
 
     script:
     """
-    git clone https://bitbucket.org/genomicepidemiology/resfinder_db.git
+    pip install git+https://bitbucket.org/genomicepidemiology/resfinder_db.git > /dev/null 2>&1 || true
+    mkdir -p resfinder_db
+    python3 -c "
+import urllib.request, zipfile, io, os
+url = 'https://bitbucket.org/genomicepidemiology/resfinder_db/get/master.zip'
+resp = urllib.request.urlopen(url)
+z = zipfile.ZipFile(io.BytesIO(resp.read()))
+for f in z.namelist():
+    if f.endswith('.fsa'):
+        outname = os.path.basename(f)
+        with open(os.path.join('resfinder_db', outname), 'wb') as out:
+            out.write(z.read(f))
+print(f'Downloaded {len(os.listdir(\"resfinder_db\"))} ResFinder database files')
+"
     """
 }
 
 process INDEX_DB {
     label 'process_low'
-    container 'staphb/kma:1.4.14'
+    container 'docker.io/staphb/kma:1.4.14'
 
     input:
     path db
@@ -34,7 +46,7 @@ process INDEX_DB {
 process KMA {
     tag "$meta.id"
     label 'process_low'
-    container 'staphb/kma:1.4.14'
+    container 'docker.io/staphb/kma:1.4.14'
 
     input:
     tuple val(meta), path(reads)

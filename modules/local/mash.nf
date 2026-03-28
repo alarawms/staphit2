@@ -1,7 +1,7 @@
 process MASH {
     tag "$meta.id"
     label 'process_low'
-    container 'staphb/mash:latest'
+    container 'docker.io/staphb/mash:latest'
 
     input:
     tuple val(meta), path(assembly)

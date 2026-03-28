@@ -1,7 +1,7 @@
 process SUMMARY_MERGER {
     label 'process_low'
     publishDir "${params.outdir}/summary", mode: 'copy'
-    container 'python:3.9-slim'
+    container 'docker.io/python:3.9'
 
     input:
     path sample_summaries

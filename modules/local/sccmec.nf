@@ -1,7 +1,7 @@
 process SCCMEC {
     tag "$meta.id"
     label 'process_low'
-    container 'staphb/staphopia-sccmec:latest'
+    container 'docker.io/staphb/staphopia-sccmec:latest'
 
     input:
     tuple val(meta), path(assembly)

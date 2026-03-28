@@ -1,7 +1,7 @@
 process PANAROO {
     label 'process_high'
     publishDir "${params.outdir}/panaroo", mode: 'copy'
-    container 'staphb/panaroo:1.3.4'
+    container 'docker.io/staphb/panaroo:1.3.4'
 
     input:
     path gffs

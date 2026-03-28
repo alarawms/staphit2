@@ -1,7 +1,7 @@
 process ABRICATE_MULTI {
     tag "$meta.id"
     label 'process_low'
-    container 'staphb/abricate:latest'
+    container 'docker.io/staphb/abricate:latest'
 
     input:
     tuple val(meta), path(assembly)

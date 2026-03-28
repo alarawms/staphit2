@@ -1,7 +1,7 @@
 process AGR_TYPING {
     tag "$meta.id"
     label 'process_low'
-    container 'alarawms/staph_agr_typer:latest'
+    container 'docker.io/alarawms/staph_agr_typer:latest'
 
     input:
     tuple val(meta), path(assembly)

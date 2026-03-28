@@ -1,7 +1,7 @@
 process CHEWBBACA_PREP {
     label 'process_medium'
     publishDir "${params.outdir}/cgmlst/schema", mode: 'copy'
-    container 'ummidock/chewbbaca:latest'
+    container 'docker.io/ummidock/chewbbaca:latest'
 
     input:
     path schema_fasta_dir
@@ -18,7 +18,7 @@ process CHEWBBACA_PREP {
 process CHEWBBACA_ALLELE {
     tag "$meta.id"
     label 'process_medium'
-    container 'ummidock/chewbbaca:latest'
+    container 'docker.io/ummidock/chewbbaca:latest'
 
     input:
     tuple val(meta), path(assembly)
@@ -42,7 +42,7 @@ process CHEWBBACA_ALLELE {
 process CHEWBBACA_JOIN {
     label 'process_low'
     publishDir "${params.outdir}/cgmlst", mode: 'copy'
-    container 'ummidock/chewbbaca:latest'
+    container 'docker.io/ummidock/chewbbaca:latest'
 
     input:
     path profiles
@@ -79,7 +79,7 @@ with open('cgmlst_profiles.tsv') as f:
 process CGMLST_DISTS {
     label 'process_low'
     publishDir "${params.outdir}/cgmlst", mode: 'copy'
-    container 'python:3.9-slim'
+    container 'docker.io/python:3.9'
 
     input:
     path profiles

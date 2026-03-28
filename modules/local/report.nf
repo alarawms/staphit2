@@ -1,7 +1,7 @@
 process REPORT {
     label 'process_low'
     publishDir "${params.outdir}/report", mode: 'copy'
-    container 'python:3.9-slim'
+    container 'docker.io/python:3.9'
 
     input:
     path summary_tsv

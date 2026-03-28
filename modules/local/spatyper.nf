@@ -1,7 +1,7 @@
 process SPATYPER {
     tag "$meta.id"
     label 'process_low'
-    container 'staphb/spatyper:latest'
+    container 'docker.io/staphb/spatyper:latest'
 
     input:
     tuple val(meta), path(assembly)

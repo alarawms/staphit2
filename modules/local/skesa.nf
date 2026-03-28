@@ -1,7 +1,7 @@
 process SKESA {
     tag "$meta.id"
     label 'process_high'
-    container 'staphb/skesa:latest'
+    container 'docker.io/staphb/skesa:latest'
 
     input:
     tuple val(meta), path(reads)

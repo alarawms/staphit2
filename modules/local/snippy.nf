@@ -1,7 +1,7 @@
 process SNIPPY {
     tag "$meta.id"
     label 'process_medium'
-    container 'staphb/snippy:4.6.0'
+    container 'docker.io/staphb/snippy:4.6.0'
 
     input:
     tuple val(meta), path(reads)
@@ -19,7 +19,7 @@ process SNIPPY {
 process SNIPPY_CORE {
     label 'process_medium'
     publishDir "${params.outdir}/snippy_core", mode: 'copy'
-    container 'staphb/snippy:4.6.0'
+    container 'docker.io/staphb/snippy:4.6.0'
 
     input:
     path snippy_dirs

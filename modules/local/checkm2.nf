@@ -1,7 +1,7 @@
 process CHECKM2 {
     tag "$meta.id"
     label 'process_medium'
-    container 'staphb/checkm2:latest'
+    container 'docker.io/staphb/checkm2:latest'
 
     input:
     tuple val(meta), path(assembly)

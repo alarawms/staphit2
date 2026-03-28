@@ -30,13 +30,13 @@ workflow QC_ASSEMBLY {
     TRIMGALORE ( ch_reads )
     ch_trimmed  = TRIMGALORE.out.reads
     ch_trim_log = TRIMGALORE.out.log
-    ch_versions = ch_versions.mix(TRIMGALORE.out.versions.first())
+    // ch_versions = ch_versions.mix(TRIMGALORE.out.versions.first()) // uses topic channels
 
     //
     // MODULE: FastQC on trimmed reads
     //
     FASTQC ( ch_trimmed )
-    ch_versions = ch_versions.mix(FASTQC.out.versions.first())
+    // ch_versions = ch_versions.mix(FASTQC.out.versions.first()) // uses topic channels
 
     //
     // MODULE: Assemble with SPAdes
@@ -47,7 +47,7 @@ workflow QC_ASSEMBLY {
         []
     )
     ch_spades_scaffolds = SPADES.out.scaffolds
-    ch_versions = ch_versions.mix(SPADES.out.versions.first())
+    // ch_versions = ch_versions.mix(SPADES.out.versions.first()) // uses topic channels
 
     //
     // MODULE: Assemble with SKESA (alternative assembler)
@@ -68,7 +68,7 @@ workflow QC_ASSEMBLY {
         [[:], []],
         [[:], []]
     )
-    ch_versions = ch_versions.mix(QUAST.out.versions.first())
+    // ch_versions = ch_versions.mix(QUAST.out.versions.first()) // uses topic channels
 
     //
     // MODULE: Download CheckM2 database (runs once)

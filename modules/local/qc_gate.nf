@@ -1,7 +1,7 @@
 process QC_GATE {
     label 'process_low'
     publishDir "${params.outdir}/qc_gate", mode: 'copy'
-    container 'python:3.9-slim'
+    container 'docker.io/python:3.9'
 
     input:
     path "reports/*"

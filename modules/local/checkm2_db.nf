@@ -1,7 +1,7 @@
 process CHECKM2_DB {
     label 'process_low'
     publishDir "${params.outdir}/databases", mode: 'copy'
-    container 'staphb/checkm2:latest'
+    container 'docker.io/staphb/checkm2:latest'
 
     output:
     path "uniref100.KO.1.dmnd", emit: db

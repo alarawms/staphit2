@@ -1,7 +1,7 @@
 process OUTBREAK_CLUSTER {
     label 'process_low'
     publishDir "${params.outdir}/clusters", mode: 'copy'
-    container 'python:3.9-slim'
+    container 'docker.io/python:3.9'
 
     input:
     path snp_dists

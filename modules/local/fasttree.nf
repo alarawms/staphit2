@@ -1,7 +1,7 @@
 process FASTTREE {
     label 'process_medium'
     publishDir "${params.outdir}/fasttree", mode: 'copy'
-    container 'staphb/lyveset:2.0.1'
+    container 'docker.io/staphb/lyveset:2.0.1'
 
     input:
     path alignment

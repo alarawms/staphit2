@@ -1,7 +1,7 @@
 process VALIDATE_METADATA {
     label 'process_low'
     publishDir "${params.outdir}/metadata", mode: 'copy'
-    container 'python:3.9-slim'
+    container 'docker.io/python:3.9'
 
     input:
     path metadata_csv

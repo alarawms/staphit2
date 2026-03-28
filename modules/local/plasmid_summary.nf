@@ -1,7 +1,7 @@
 process PLASMID_SUMMARY {
     label 'process_low'
     publishDir "${params.outdir}/plasmids", mode: 'copy'
-    container 'python:3.9-slim'
+    container 'docker.io/python:3.9'
 
     input:
     path mob_reports

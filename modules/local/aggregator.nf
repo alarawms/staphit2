@@ -2,7 +2,7 @@ process AGGREGATOR {
     tag "$meta.id"
     label 'process_low'
     publishDir "${params.outdir}/aggregated", mode: 'copy'
-    container 'python:3.9-slim'
+    container 'docker.io/python:3.9'
 
     input:
     tuple val(meta), path(trim_log), path(fastqc_files), path(quast_dir), path(mlst_tsv), path(abricate_tabs), path(amrfinder_report), path(mash_sketch), path(spa_report), path(sccmec_report), path(agr_report), path(kma_res), path(metadata_json)

@@ -1,7 +1,7 @@
 process MOB_RECON {
     tag "$meta.id"
     label 'process_medium'
-    container 'staphb/mob-suite:latest'
+    container 'docker.io/staphb/mob-suite:latest'
 
     input:
     tuple val(meta), path(assembly)
