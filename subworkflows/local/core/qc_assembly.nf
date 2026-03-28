@@ -8,6 +8,7 @@
 
 include { FASTQC                } from '../../../modules/nf-core/fastqc/main'
 include { TRIMGALORE            } from '../../../modules/nf-core/trimgalore/main'
+include { RASUSA                } from '../../../modules/nf-core/rasusa/main'
 include { SPADES                } from '../../../modules/nf-core/spades/main'
 include { QUAST                 } from '../../../modules/nf-core/quast/main'
 include { SKESA                 } from '../../../modules/local/skesa'
@@ -28,12 +29,21 @@ workflow QC_ASSEMBLY {
     // MODULE: Trim reads with Trim Galore
     //
     TRIMGALORE ( ch_reads )
-    ch_trimmed  = TRIMGALORE.out.reads
     ch_trim_log = TRIMGALORE.out.log
     // ch_versions = ch_versions.mix(TRIMGALORE.out.versions.first()) // uses topic channels
 
     //
-    // MODULE: FastQC on trimmed reads
+    // MODULE: Subsample reads to target coverage with Rasusa
+    // S. aureus genome ~2.8 Mb, target 100x
+    //
+    ch_rasusa_input = TRIMGALORE.out.reads.map { meta, reads ->
+        [ meta, reads, params.genome_size ?: 2800000 ]
+    }
+    RASUSA ( ch_rasusa_input, params.target_depth ?: 100 )
+    ch_trimmed = RASUSA.out.reads
+
+    //
+    // MODULE: FastQC on subsampled reads
     //
     FASTQC ( ch_trimmed )
     // ch_versions = ch_versions.mix(FASTQC.out.versions.first()) // uses topic channels
