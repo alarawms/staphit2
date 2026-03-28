@@ -1,91 +1,165 @@
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    IMPORT MODULES / SUBWORKFLOWS / FUNCTIONS
+    STAPHIT2 — MRSA GENOMIC SURVEILLANCE PIPELINE
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    Phase 1: QC & Assembly
+    Phase 2: S. aureus Typing (MLST, spa, SCCmec, agr, Mash)
+    Phase 3: AMR Detection (AMRFinderPlus, ABRicate, KMA)
+    Phase 4: Plasmid Analysis (MOB-suite)
+    Phase 5: Phylogeny (Prokka → Panaroo/Snippy → FastTree/IQ-TREE → SNP dists)
+    Phase 6: Per-sample Aggregation & Summary Merge
+    Phase 7: Outbreak Clustering
+    Phase 8: Reporting & Visualization
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
-include { FASTQC                 } from '../modules/nf-core/fastqc/main'
-include { MULTIQC                } from '../modules/nf-core/multiqc/main'
+
 include { paramsSummaryMap       } from 'plugin/nf-schema'
 include { paramsSummaryMultiqc   } from '../subworkflows/nf-core/utils_nfcore_pipeline'
 include { softwareVersionsToYAML } from '../subworkflows/nf-core/utils_nfcore_pipeline'
 include { methodsDescriptionText } from '../subworkflows/local/utils_nfcore_staphit2_pipeline'
 
-/*
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    RUN MAIN WORKFLOW
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-*/
+// Subworkflows
+include { QC_ASSEMBLY      } from '../subworkflows/local/core/qc_assembly'
+include { SA_TYPING        } from '../subworkflows/local/species/s_aureus/typing'
+include { AMR_DETECTION    } from '../subworkflows/local/core/amr'
+include { PHYLOGENY        } from '../subworkflows/local/core/phylogeny'
+include { PLASMID_ANALYSIS } from '../subworkflows/local/core/plasmids'
+include { CLUSTERING       } from '../subworkflows/local/core/clustering'
+
+// Reporting modules (wired directly for flexible channel joining)
+include { AGGREGATOR       } from '../modules/local/aggregator'
+include { SUMMARY_MERGER   } from '../modules/local/summary_merger'
+include { REPORT           } from '../modules/local/report'
+include { VISUALIZATION    } from '../modules/local/visualization'
+
+// MultiQC
+include { MULTIQC          } from '../modules/nf-core/multiqc/main'
 
 workflow STAPHIT2 {
 
     take:
-    ch_samplesheet // channel: samplesheet read in from --input
+    ch_samplesheet  // channel: samplesheet read in from --input
+
     main:
 
-    ch_versions = channel.empty()
-    ch_multiqc_files = channel.empty()
-    //
-    // MODULE: Run FastQC
-    //
-    FASTQC (
-        ch_samplesheet
+    ch_versions      = Channel.empty()
+    ch_multiqc_files = Channel.empty()
+
+    // ── Phase 1: QC & Assembly ──────────────────────────────────────────────
+    QC_ASSEMBLY ( ch_samplesheet )
+    ch_assemblies = QC_ASSEMBLY.out.passed_assemblies
+    ch_trimmed    = QC_ASSEMBLY.out.trimmed_reads
+    ch_versions   = ch_versions.mix(QC_ASSEMBLY.out.versions)
+
+    // ── Phase 2: S. aureus Typing ───────────────────────────────────────────
+    SA_TYPING ( ch_assemblies )
+    ch_versions = ch_versions.mix(SA_TYPING.out.versions)
+
+    // ── Phase 3: AMR Detection ──────────────────────────────────────────────
+    AMR_DETECTION ( ch_assemblies, ch_trimmed )
+
+    // ── Phase 4: Plasmid Analysis ───────────────────────────────────────────
+    PLASMID_ANALYSIS ( ch_assemblies )
+
+    // ── Phase 5: Phylogeny ──────────────────────────────────────────────────
+    PHYLOGENY ( ch_assemblies, ch_trimmed )
+    ch_versions = ch_versions.mix(PHYLOGENY.out.versions)
+
+    // ── Phase 6: Per-sample Aggregation ─────────────────────────────────────
+    // Join all per-sample outputs by meta.id into a single tuple for AGGREGATOR
+    ch_agg_in = QC_ASSEMBLY.out.trim_log
+        .join(QC_ASSEMBLY.out.fastqc_zip)
+        .join(QC_ASSEMBLY.out.quast_results)
+        .join(SA_TYPING.out.mlst)
+        .join(AMR_DETECTION.out.abricate)
+        .join(AMR_DETECTION.out.amrfinder)
+        .join(SA_TYPING.out.mash)
+        .join(SA_TYPING.out.spa)
+        .join(SA_TYPING.out.sccmec)
+        .join(SA_TYPING.out.agr)
+        .join(AMR_DETECTION.out.kma)
+
+    // Broadcast metadata JSON to all samples (or placeholder if not provided)
+    ch_metadata = params.metadata
+        ? Channel.fromPath(params.metadata, checkIfExists: true)
+        : Channel.of(file('NO_METADATA'))
+
+    ch_agg_final = ch_agg_in.combine(ch_metadata)
+
+    AGGREGATOR ( ch_agg_final )
+
+    // Merge per-sample summaries into a single run-level table
+    SUMMARY_MERGER (
+        AGGREGATOR.out.summary.map { meta, csv -> csv }.collect()
     )
-    ch_multiqc_files = ch_multiqc_files.mix(FASTQC.out.zip.collect{it[1]})
-    ch_versions = ch_versions.mix(FASTQC.out.versions.first())
 
-    //
+    // ── Phase 7: Outbreak Clustering ────────────────────────────────────────
+    ch_cgmlst_dists = Channel.of(file('NO_CGMLST_DISTS'))
+
+    CLUSTERING (
+        PHYLOGENY.out.snp_dists.map { meta, tsv -> tsv },
+        ch_cgmlst_dists,
+        SUMMARY_MERGER.out.summary
+    )
+
+    // ── Phase 8: Reporting & Visualization ──────────────────────────────────
+    ch_qc_report       = QC_ASSEMBLY.out.qc_report
+    ch_plasmid_summary = PLASMID_ANALYSIS.out.plasmid_summary
+    ch_clusters        = CLUSTERING.out.report
+
+    // REPORT expects: summary_tsv, clusters, trees
+    // (reuse cluster report as "clusters" input; qc_report mapped via trees slot)
+    REPORT (
+        SUMMARY_MERGER.out.summary,
+        CLUSTERING.out.clusters,
+        ch_qc_report
+    )
+
+    // VISUALIZATION expects: summary_tsv, clusters, trees
+    ch_tree = PHYLOGENY.out.tree
+        ? PHYLOGENY.out.tree.map { it instanceof List ? it[-1] : it }
+        : Channel.of(file('NO_TREES'))
+
+    VISUALIZATION (
+        SUMMARY_MERGER.out.summary,
+        CLUSTERING.out.clusters,
+        ch_tree
+    )
+
+    // ── MultiQC ─────────────────────────────────────────────────────────────
+    ch_multiqc_files = ch_multiqc_files.mix(
+        QC_ASSEMBLY.out.fastqc_zip.collect { it[1] }
+    )
+
     // Collate and save software versions
-    //
-    def topic_versions = Channel.topic("versions")
-        .distinct()
-        .branch { entry ->
-            versions_file: entry instanceof Path
-            versions_tuple: true
-        }
-
-    def topic_versions_string = topic_versions.versions_tuple
-        .map { process, tool, version ->
-            [ process[process.lastIndexOf(':')+1..-1], "  ${tool}: ${version}" ]
-        }
-        .groupTuple(by:0)
-        .map { process, tool_versions ->
-            tool_versions.unique().sort()
-            "${process}:\n${tool_versions.join('\n')}"
-        }
-
-    softwareVersionsToYAML(ch_versions.mix(topic_versions.versions_file))
-        .mix(topic_versions_string)
+    softwareVersionsToYAML(ch_versions)
         .collectFile(
             storeDir: "${params.outdir}/pipeline_info",
-            name:  'staphit2_software_'  + 'mqc_'  + 'versions.yml',
+            name:  'staphit2_software_mqc_versions.yml',
             sort: true,
             newLine: true
         ).set { ch_collated_versions }
 
-
-    //
-    // MODULE: MultiQC
-    //
-    ch_multiqc_config        = channel.fromPath(
+    ch_multiqc_config        = Channel.fromPath(
         "$projectDir/assets/multiqc_config.yml", checkIfExists: true)
-    ch_multiqc_custom_config = params.multiqc_config ?
-        channel.fromPath(params.multiqc_config, checkIfExists: true) :
-        channel.empty()
-    ch_multiqc_logo          = params.multiqc_logo ?
-        channel.fromPath(params.multiqc_logo, checkIfExists: true) :
-        channel.empty()
+    ch_multiqc_custom_config = params.multiqc_config
+        ? Channel.fromPath(params.multiqc_config, checkIfExists: true)
+        : Channel.empty()
+    ch_multiqc_logo          = params.multiqc_logo
+        ? Channel.fromPath(params.multiqc_logo, checkIfExists: true)
+        : Channel.empty()
 
     summary_params      = paramsSummaryMap(
         workflow, parameters_schema: "nextflow_schema.json")
-    ch_workflow_summary = channel.value(paramsSummaryMultiqc(summary_params))
-    ch_multiqc_files = ch_multiqc_files.mix(
+    ch_workflow_summary = Channel.value(paramsSummaryMultiqc(summary_params))
+    ch_multiqc_files    = ch_multiqc_files.mix(
         ch_workflow_summary.collectFile(name: 'workflow_summary_mqc.yaml'))
-    ch_multiqc_custom_methods_description = params.multiqc_methods_description ?
-        file(params.multiqc_methods_description, checkIfExists: true) :
-        file("$projectDir/assets/methods_description_template.yml", checkIfExists: true)
-    ch_methods_description                = channel.value(
-        methodsDescriptionText(ch_multiqc_custom_methods_description))
 
+    ch_multiqc_custom_methods_description = params.multiqc_methods_description
+        ? file(params.multiqc_methods_description, checkIfExists: true)
+        : file("$projectDir/assets/methods_description_template.yml", checkIfExists: true)
+    ch_methods_description = Channel.value(
+        methodsDescriptionText(ch_multiqc_custom_methods_description))
     ch_multiqc_files = ch_multiqc_files.mix(ch_collated_versions)
     ch_multiqc_files = ch_multiqc_files.mix(
         ch_methods_description.collectFile(
@@ -103,9 +177,9 @@ workflow STAPHIT2 {
         []
     )
 
-    emit:multiqc_report = MULTIQC.out.report.toList() // channel: /path/to/multiqc_report.html
-    versions       = ch_versions                 // channel: [ path(versions.yml) ]
-
+    emit:
+    multiqc_report = MULTIQC.out.report.toList()  // path/to/multiqc_report.html
+    versions       = ch_versions                   // [ path(versions.yml) ]
 }
 
 /*
