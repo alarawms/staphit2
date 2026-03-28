@@ -6,22 +6,23 @@ process FETCH_RESFINDER_DB {
     path "resfinder_db", emit: db
 
     script:
-    """
-    pip install git+https://bitbucket.org/genomicepidemiology/resfinder_db.git > /dev/null 2>&1 || true
+    '''
     mkdir -p resfinder_db
-    python3 -c "
+    python3 << 'PYEOF'
 import urllib.request, zipfile, io, os
 url = 'https://bitbucket.org/genomicepidemiology/resfinder_db/get/master.zip'
 resp = urllib.request.urlopen(url)
 z = zipfile.ZipFile(io.BytesIO(resp.read()))
+count = 0
 for f in z.namelist():
     if f.endswith('.fsa'):
         outname = os.path.basename(f)
         with open(os.path.join('resfinder_db', outname), 'wb') as out:
             out.write(z.read(f))
-print(f'Downloaded {len(os.listdir(\"resfinder_db\"))} ResFinder database files')
-"
-    """
+        count += 1
+print(f'Downloaded {count} ResFinder database files')
+PYEOF
+    '''
 }
 
 process INDEX_DB {
