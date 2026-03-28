@@ -22,7 +22,12 @@ workflow AMR_DETECTION {
     //
     // Assembly-based AMR detection with AMRFinderPlus
     //
-    AMRFINDERPLUS_RUN ( ch_assemblies, [] )
+    // Add organism to meta for AMRFinderPlus and ensure single file
+    ch_amr_input = ch_assemblies.map { meta, fasta ->
+        def new_meta = meta + [organism: 'Staphylococcus_aureus']
+        [ new_meta, fasta instanceof List ? fasta[0] : fasta ]
+    }
+    AMRFINDERPLUS_RUN ( ch_amr_input, [] )
 
     //
     // Assembly-based screening with ABRicate (resfinder + vfdb + plasmidfinder)
@@ -37,7 +42,7 @@ workflow AMR_DETECTION {
     KMA ( ch_trimmed_reads, INDEX_DB.out.indexed_db.collect() )
 
     emit:
-    amrfinder = AMRFINDERPLUS_RUN.out.report  // [ val(meta), path(tsv) ]
+    amrfinder = AMRFINDERPLUS_RUN.out.report   // [ val(meta), path(tsv) ]
     abricate  = ABRICATE_MULTI.out.reports    // [ val(meta), path(tabs) ]
     kma       = KMA.out.results               // [ val(meta), path(res) ]
 }
