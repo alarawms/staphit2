@@ -8,7 +8,7 @@ process CHECKM2_DB {
 
     script:
     """
-    checkm2 database --download --path _tmp_db
+    checkm2 database --download --path _tmp_db --no_write_json_db
     mv _tmp_db/CheckM2_database/uniref100.KO.1.dmnd .
     """
 }
