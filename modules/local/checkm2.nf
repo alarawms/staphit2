@@ -13,7 +13,12 @@ process CHECKM2 {
     script:
     """
     mkdir -p input_dir
-    cp ${assembly} input_dir/${meta.id}.fasta
+    # Handle both gzipped and plain FASTA
+    if file ${assembly} | grep -q gzip; then
+        zcat ${assembly} > input_dir/${meta.id}.fasta
+    else
+        cp ${assembly} input_dir/${meta.id}.fasta
+    fi
     checkm2 predict --input input_dir --output-directory checkm2_out -x fasta --threads ${task.cpus} --force --remove_intermediates --database_path ${db_file}
     cp checkm2_out/quality_report.tsv ${meta.id}_quality_report.tsv
     """

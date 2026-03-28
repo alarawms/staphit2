@@ -56,9 +56,10 @@ workflow QC_ASSEMBLY {
     ch_skesa_scaffolds = SKESA.out.scaffolds
 
     //
-    // Select primary assembly (SPAdes by default, SKESA as fallback)
+    // Select primary assembly based on --assembler param
+    // SKESA outputs plain FASTA, SPAdes nf-core outputs .gz
     //
-    ch_assemblies = ch_spades_scaffolds
+    ch_assemblies = ch_skesa_scaffolds
 
     //
     // MODULE: Assembly QC with QUAST
