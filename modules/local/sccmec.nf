@@ -1,7 +1,8 @@
 process SCCMEC {
     tag "$meta.id"
     label 'process_low'
-    container 'docker.io/staphb/staphopia-sccmec:latest'
+    errorStrategy 'ignore'
+    container 'docker.io/alarawms/sccmec_typer:latest'
 
     input:
     tuple val(meta), path(assembly)
@@ -11,6 +12,6 @@ process SCCMEC {
 
     script:
     """
-    staphopia-sccmec --input ${assembly} --output ${meta.id}_sccmec.tsv 2>/dev/null || echo -e "sample_id\\tSCCmec_Type\\n${meta.id}\\tND" > ${meta.id}_sccmec.tsv
+    sccmec_typer.py --1 ${assembly} -d /opt/conda/share/sccmec_db -o ${meta.id}_sccmec.tsv 2>/dev/null || echo -e "sample_id\\tSCCmec_Type\\n${meta.id}\\tND" > ${meta.id}_sccmec.tsv
     """
 }
