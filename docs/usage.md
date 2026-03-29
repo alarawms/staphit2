@@ -1,211 +1,318 @@
 # alarawms/staphit2: Usage
 
-> _Documentation of pipeline parameters is generated automatically from the pipeline schema and can no longer be found in markdown files._
-
 ## Introduction
 
-<!-- TODO nf-core: Add documentation about anything specific to running your pipeline. For general topics, please point to (and add to) the main nf-core website. -->
+**alarawms/staphit2** is an nf-core-compatible Nextflow pipeline for comprehensive MRSA (*Staphylococcus aureus*) genomic surveillance. Starting from raw Illumina paired-end reads, it performs quality control, *de novo* assembly, multi-locus typing (MLST, spa, SCCmec, agr), antimicrobial resistance gene detection and point mutation calling, structured virulence profiling, plasmid reconstruction, core genome phylogenetics, pairwise SNP distances, tiered outbreak clustering, and automated reporting with publication-ready figures.
+
+The pipeline is built on a species-agnostic core architecture. Species-specific analysis steps (typing tools, virulence categories, outbreak thresholds) are driven by a descriptor file (`species/s_aureus.yml`), enabling future extension to additional pathogens without modifying the core workflow.
 
 ## Samplesheet input
 
-You will need to create a samplesheet with information about the samples you would like to analyse before running the pipeline. Use this parameter to specify its location. It has to be a comma-separated file with 3 columns, and a header row as shown in the examples below.
+You will need to create a samplesheet CSV describing the samples you want to analyse. Specify it with the `--input` parameter:
 
 ```bash
---input '[path to samplesheet file]'
+--input samplesheet.csv
 ```
+
+The file must be comma-separated with a header row and at least three columns. Each row represents one sample (paired-end reads).
+
+```csv title="samplesheet.csv"
+sample,fastq_1,fastq_2
+MRSA_001,/data/MRSA_001_R1.fastq.gz,/data/MRSA_001_R2.fastq.gz
+MRSA_002,/data/MRSA_002_R1.fastq.gz,/data/MRSA_002_R2.fastq.gz
+MRSA_003,/data/MRSA_003_R1.fastq.gz,/data/MRSA_003_R2.fastq.gz
+```
+
+| Column   | Description |
+|----------|-------------|
+| `sample` | Unique sample identifier. Must not contain spaces. If the same identifier appears on multiple rows the pipeline will concatenate the raw reads before downstream analysis (useful for samples sequenced across multiple lanes). |
+| `fastq_1` | Full path to the forward-read FASTQ file. Must be gzipped (`.fastq.gz` or `.fq.gz`). |
+| `fastq_2` | Full path to the reverse-read FASTQ file. Must be gzipped (`.fastq.gz` or `.fq.gz`). |
+
+An [example samplesheet](../assets/samplesheet.csv) is provided with the pipeline.
 
 ### Multiple runs of the same sample
 
-The `sample` identifiers have to be the same when you have re-sequenced the same sample more than once e.g. to increase sequencing depth. The pipeline will concatenate the raw reads before performing any downstream analysis. Below is an example for the same sample sequenced across 3 lanes:
+If a sample was sequenced more than once (e.g. to increase depth), use the same `sample` name on each row. The pipeline will concatenate reads before any downstream processing:
 
 ```csv title="samplesheet.csv"
 sample,fastq_1,fastq_2
-CONTROL_REP1,AEG588A1_S1_L002_R1_001.fastq.gz,AEG588A1_S1_L002_R2_001.fastq.gz
-CONTROL_REP1,AEG588A1_S1_L003_R1_001.fastq.gz,AEG588A1_S1_L003_R2_001.fastq.gz
-CONTROL_REP1,AEG588A1_S1_L004_R1_001.fastq.gz,AEG588A1_S1_L004_R2_001.fastq.gz
+MRSA_001,MRSA_001_L001_R1.fastq.gz,MRSA_001_L001_R2.fastq.gz
+MRSA_001,MRSA_001_L002_R1.fastq.gz,MRSA_001_L002_R2.fastq.gz
 ```
 
-### Full samplesheet
+## Metadata input (optional)
 
-The pipeline will auto-detect whether a sample is single- or paired-end using the information provided in the samplesheet. The samplesheet can have as many columns as you desire, however, there is a strict requirement for the first 3 columns to match those defined in the table below.
+The pipeline accepts two optional metadata files that enable genotype--phenotype concordance analysis, epidemiological annotation of outbreak clusters, and richer surveillance reports.
 
-A final samplesheet file consisting of both single- and paired-end data may look something like the one below. This is for 6 samples, where `TREATMENT_REP3` has been sequenced twice.
+### Sample metadata (`--metadata`)
 
-```csv title="samplesheet.csv"
-sample,fastq_1,fastq_2
-CONTROL_REP1,AEG588A1_S1_L002_R1_001.fastq.gz,AEG588A1_S1_L002_R2_001.fastq.gz
-CONTROL_REP2,AEG588A2_S2_L002_R1_001.fastq.gz,AEG588A2_S2_L002_R2_001.fastq.gz
-CONTROL_REP3,AEG588A3_S3_L002_R1_001.fastq.gz,AEG588A3_S3_L002_R2_001.fastq.gz
-TREATMENT_REP1,AEG588A4_S4_L003_R1_001.fastq.gz,
-TREATMENT_REP2,AEG588A5_S5_L003_R1_001.fastq.gz,
-TREATMENT_REP3,AEG588A6_S6_L003_R1_001.fastq.gz,
-TREATMENT_REP3,AEG588A6_S6_L004_R1_001.fastq.gz,
+A CSV following the [PHA4GE](https://pha4ge.org/) contextual data schema. At minimum it must contain a `sample_id` column that matches the `sample` column in the samplesheet.
+
+```csv title="sample_metadata.csv"
+sample_id,organism,collection_date,geo_loc_country,geo_loc_region,host,isolation_source,purpose_of_sampling
+MRSA_001,Staphylococcus aureus,2025-11-01,Saudi Arabia,Riyadh,Homo sapiens,nasal,diagnostic testing
+MRSA_002,Staphylococcus aureus,2025-11-03,Saudi Arabia,Riyadh,Homo sapiens,blood,diagnostic testing
 ```
 
-| Column    | Description                                                                                                                                                                            |
-| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `sample`  | Custom sample name. This entry will be identical for multiple sequencing libraries/runs from the same sample. Spaces in sample names are automatically converted to underscores (`_`). |
-| `fastq_1` | Full path to FastQ file for Illumina short reads 1. File has to be gzipped and have the extension ".fastq.gz" or ".fq.gz".                                                             |
-| `fastq_2` | Full path to FastQ file for Illumina short reads 2. File has to be gzipped and have the extension ".fastq.gz" or ".fq.gz".                                                             |
+Commonly used fields include:
 
-An [example samplesheet](../assets/samplesheet.csv) has been provided with the pipeline.
+| Field | Description |
+|-------|-------------|
+| `sample_id` | Must match samplesheet `sample` column |
+| `organism` | Species name |
+| `collection_date` | ISO 8601 date (YYYY-MM-DD) |
+| `geo_loc_country` | Country of collection |
+| `geo_loc_region` | Sub-national region |
+| `host` | Host organism (e.g. `Homo sapiens`) |
+| `isolation_source` | Body site or environmental source |
+| `purpose_of_sampling` | Reason for sampling |
+| `infection_origin` | HA-MRSA, CA-MRSA, or LA-MRSA |
+
+### Antibiogram (`--antibiogram`)
+
+A CSV in NCBI BioSample Antibiogram long format, with one row per sample--antibiotic combination:
+
+```csv title="antibiogram.csv"
+sample_id,antibiotic,resistance_phenotype,measurement,measurement_units,measurement_sign,laboratory_typing_method,testing_standard
+MRSA_001,Vancomycin,susceptible,1,mg/L,<=,MIC,CLSI
+MRSA_001,Oxacillin,resistant,4,mg/L,>=,MIC,CLSI
+MRSA_002,Vancomycin,susceptible,0.5,mg/L,<=,MIC,CLSI
+```
+
+| Field | Description |
+|-------|-------------|
+| `sample_id` | Must match samplesheet `sample` column |
+| `antibiotic` | Antimicrobial agent name |
+| `resistance_phenotype` | `susceptible`, `intermediate`, or `resistant` |
+| `measurement` | MIC value or zone diameter |
+| `measurement_units` | `mg/L` (MIC) or `mm` (disk diffusion) |
+| `measurement_sign` | `<=`, `=`, or `>=` |
+| `laboratory_typing_method` | `MIC`, `DISK`, or `ETEST` |
+| `testing_standard` | `CLSI` or `EUCAST` |
+
+### Generating metadata from lab data
+
+The pipeline ships helper scripts in `bin/` for converting common lab formats into the required CSVs:
+
+```bash
+# Convert Vitek 2 PDF reports to NCBI antibiogram format
+python bin/staphit-metadata convert --from-vitek-pdf vitek_pdfs/ -o antibiogram.csv
+
+# Convert a clinical Excel spreadsheet to PHA4GE metadata
+python bin/staphit-metadata convert --from-external-xlsx clinical.xlsx \
+    --metadata sample_metadata.csv -o enriched_metadata.csv
+
+# Search SRA for public S. aureus data and download
+python bin/staphit-fetch search --organism "Staphylococcus aureus" --country "Saudi Arabia" -o results.tsv
+python bin/staphit-fetch download results.tsv --output-dir fetched/
+```
+
+An [external metadata template](../assets/external_metadata_template.csv) is provided for reference.
 
 ## Running the pipeline
 
-The typical command for running the pipeline is as follows:
+### Basic run
 
 ```bash
-nextflow run alarawms/staphit2 --input ./samplesheet.csv --outdir ./results --genome GRCh37 -profile docker
+nextflow run alarawms/staphit2 \
+    -profile docker \
+    --input samplesheet.csv \
+    --outdir results
 ```
 
-This will launch the pipeline with the `docker` configuration profile. See below for more information about profiles.
-
-Note that the pipeline will create the following files in your working directory:
+### Full surveillance run (with metadata and antibiogram)
 
 ```bash
-work                # Directory containing the nextflow working files
-<OUTDIR>            # Finished results in specified location (defined with --outdir)
-.nextflow_log       # Log file from Nextflow
-# Other nextflow hidden files, eg. history of pipeline runs and old logs.
+nextflow run alarawms/staphit2 \
+    -profile docker \
+    --input samplesheet.csv \
+    --outdir results \
+    --metadata sample_metadata.csv \
+    --antibiogram antibiogram.csv
 ```
 
-If you wish to repeatedly use the same parameters for multiple runs, rather than specifying each flag in the command, you can specify these in a params file.
+### Resume after failure or adding samples
 
-Pipeline settings can be provided in a `yaml` or `json` file via `-params-file <file>`.
+```bash
+nextflow run alarawms/staphit2 \
+    -profile docker \
+    --input samplesheet.csv \
+    --outdir results \
+    -resume
+```
 
-> [!WARNING]
-> Do not use `-c <file>` to specify parameters as this will result in errors. Custom config files specified with `-c` must only be used for [tuning process resource specifications](https://nf-co.re/docs/usage/configuration#tuning-workflow-resources), other infrastructural tweaks (such as output directories), or module arguments (args).
+### Using a params file
 
-The above pipeline run specified with a params file in yaml format:
+Rather than specifying every flag on the command line, you can place parameters in a YAML file:
+
+```yaml title="params.yaml"
+input: 'samplesheet.csv'
+outdir: 'results'
+metadata: 'sample_metadata.csv'
+antibiogram: 'antibiogram.csv'
+phylo_method: 'panaroo'
+tree_builder: 'iqtree'
+target_depth: 100
+```
 
 ```bash
 nextflow run alarawms/staphit2 -profile docker -params-file params.yaml
 ```
 
-with:
+> [!WARNING]
+> Do not use `-c <file>` to specify parameters as this will result in errors. Custom config files specified with `-c` must only be used for [tuning process resource specifications](https://nf-co.re/docs/usage/configuration#tuning-workflow-resources), other infrastructural tweaks (such as output directories), or module arguments (args).
 
-```yaml title="params.yaml"
-input: './samplesheet.csv'
-outdir: './results/'
-genome: 'GRCh37'
-<...>
+Note that the pipeline will create the following files in your working directory:
+
+```
+work/               # Nextflow working files
+<OUTDIR>/           # Finished results (defined with --outdir)
+.nextflow_log       # Log file from Nextflow
 ```
 
-You can also generate such `YAML`/`JSON` files via [nf-core/launch](https://nf-co.re/launch).
+## Pipeline parameters
 
-### Updating the pipeline
+### Input/Output
 
-When you run the above command, Nextflow automatically pulls the pipeline code from GitHub and stores it as a cached version. When running the pipeline after this, it will always use the cached version if available - even if the pipeline has been updated since. To make sure that you're running the latest version of the pipeline, make sure that you regularly update the cached version of the pipeline:
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--input` | (required) | Path to samplesheet CSV |
+| `--outdir` | (required) | Path to output directory |
+| `--metadata` | `null` | Path to sample metadata CSV (PHA4GE schema) |
+| `--antibiogram` | `null` | Path to antibiogram CSV (NCBI long format) |
+| `--genome` | `null` | iGenomes genome key (not typically used) |
+| `--reference` | `null` | Reference genome in GenBank format (required when `--phylo_method snippy`) |
+
+### Assembly and read processing
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--genome_size` | `2800000` | Expected genome size in bp (used by Rasusa for subsampling) |
+| `--target_depth` | `100` | Target coverage depth for Rasusa read subsampling |
+
+### Quality control
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--min_completeness` | `90` | Minimum CheckM2 completeness (%) to pass QC gate |
+| `--max_contamination` | `5` | Maximum CheckM2 contamination (%) to pass QC gate |
+| `--skip_qc_gate` | `false` | Skip the CheckM2 quality gate and process all samples |
+
+### Typing
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--sccmec_viz` | `false` | Generate SVG/HTML visual maps of SCCmec cassette elements |
+
+### Phylogenetics
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--phylo_method` | `panaroo` | Core genome method: `panaroo` (pangenome-based) or `snippy` (reference-based) |
+| `--tree_builder` | `iqtree` | Tree inference: `iqtree` (ML, slower, more accurate) or `fasttree` (approximate ML, faster) |
+| `--panaroo_clean` | `moderate` | Panaroo graph-cleaning stringency: `strict`, `moderate`, or `sensitive` |
+| `--panaroo_threshold` | `0.95` | Fraction of samples a gene must appear in to be considered core |
+| `--panaroo_aligner` | `mafft` | Alignment tool used by Panaroo |
+| `--snippy_mincov` | `10` | Minimum read depth for Snippy variant calls |
+| `--snippy_minqual` | `100` | Minimum mapping quality for Snippy variant calls |
+
+### Clustering
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--cluster_snp_tiers` | `5,15,40` | Comma-separated SNP distance thresholds defining direct transmission, outbreak, and related tiers |
+| `--cluster_cgmlst_tiers` | `10,24,50` | Comma-separated cgMLST allelic distance thresholds for the same three tiers |
+
+### MultiQC
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--multiqc_config` | `null` | Path to a custom MultiQC config YAML |
+| `--multiqc_title` | `null` | Custom title for the MultiQC report |
+| `--multiqc_logo` | `null` | Path to a custom logo for the MultiQC report |
+
+## Profiles
+
+Use `-profile` to select a software packaging method. Multiple profiles can be combined (e.g. `-profile test,docker`):
+
+| Profile | Description |
+|---------|-------------|
+| `docker` | Run all tools via [Docker](https://docker.com/) containers (recommended) |
+| `singularity` | Run via [Singularity](https://sylabs.io/docs/) containers (recommended for HPC) |
+| `apptainer` | Run via [Apptainer](https://apptainer.org/) containers |
+| `conda` | Run via [Conda](https://conda.io/) environments (last resort) |
+| `mamba` | Conda with [Mamba](https://mamba.readthedocs.io/) solver |
+| `podman` | Run via [Podman](https://podman.io/) containers |
+| `shifter` | Run via [Shifter](https://nersc.gitlab.io/development/shifter/how-to-use/) containers |
+| `charliecloud` | Run via [Charliecloud](https://charliecloud.io/) containers |
+| `wave` | Enable [Wave](https://seqera.io/wave/) containers (use with another profile) |
+| `test` | Minimal test dataset; runs automatically without additional input |
+| `test_full` | Full-size test dataset for complete validation |
+
+> [!IMPORTANT]
+> We highly recommend Docker or Singularity for full reproducibility. Use Conda only when containers are not available.
+
+The pipeline also dynamically loads institutional profiles from [nf-core/configs](https://github.com/nf-core/configs) at runtime.
+
+## Updating the pipeline
+
+When you first run the pipeline, Nextflow caches the code locally. To pull the latest version:
 
 ```bash
 nextflow pull alarawms/staphit2
 ```
 
-### Reproducibility
+## Reproducibility
 
-It is a good idea to specify the pipeline version when running the pipeline on your data. This ensures that a specific version of the pipeline code and software are used when you run your pipeline. If you keep using the same tag, you'll be running the same version of the pipeline, even if there have been changes to the code since.
+Pin a specific release when running production analyses:
 
-First, go to the [alarawms/staphit2 releases page](https://github.com/alarawms/staphit2/releases) and find the latest pipeline version - numeric only (eg. `1.3.1`). Then specify this when running the pipeline with `-r` (one hyphen) - eg. `-r 1.3.1`. Of course, you can switch to another version by changing the number after the `-r` flag.
+```bash
+nextflow run alarawms/staphit2 -r 1.0.0 -profile docker --input samplesheet.csv --outdir results
+```
 
-This version number will be logged in reports when you run the pipeline, so that you'll know what you used when you look back in the future. For example, at the bottom of the MultiQC reports.
+The version number is recorded in the MultiQC report and in `results/pipeline_info/` execution reports, ensuring traceability.
 
-To further assist in reproducibility, you can use share and reuse [parameter files](#running-the-pipeline) to repeat pipeline runs with the same settings without having to write out a command with every single parameter.
-
-> [!TIP]
-> If you wish to share such profile (such as upload as supplementary material for academic publications), make sure to NOT include cluster specific paths to files, nor institutional specific profiles.
+To repeat a run with identical settings, reuse a [params file](#using-a-params-file). When sharing params files (e.g. as supplementary material), remove any cluster-specific paths or institutional profile references.
 
 ## Core Nextflow arguments
 
 > [!NOTE]
-> These options are part of Nextflow and use a _single_ hyphen (pipeline parameters use a double-hyphen)
-
-### `-profile`
-
-Use this parameter to choose a configuration profile. Profiles can give configuration presets for different compute environments.
-
-Several generic profiles are bundled with the pipeline which instruct the pipeline to use software packaged using different methods (Docker, Singularity, Podman, Shifter, Charliecloud, Apptainer, Conda) - see below.
-
-> [!IMPORTANT]
-> We highly recommend the use of Docker or Singularity containers for full pipeline reproducibility, however when this is not possible, Conda is also supported.
-
-The pipeline also dynamically loads configurations from [https://github.com/nf-core/configs](https://github.com/nf-core/configs) when it runs, making multiple config profiles for various institutional clusters available at run time. For more information and to check if your system is supported, please see the [nf-core/configs documentation](https://github.com/nf-core/configs#documentation).
-
-Note that multiple profiles can be loaded, for example: `-profile test,docker` - the order of arguments is important!
-They are loaded in sequence, so later profiles can overwrite earlier profiles.
-
-If `-profile` is not specified, the pipeline will run locally and expect all software to be installed and available on the `PATH`. This is _not_ recommended, since it can lead to different results on different machines dependent on the computer environment.
-
-- `test`
-  - A profile with a complete configuration for automated testing
-  - Includes links to test data so needs no other parameters
-- `docker`
-  - A generic configuration profile to be used with [Docker](https://docker.com/)
-- `singularity`
-  - A generic configuration profile to be used with [Singularity](https://sylabs.io/docs/)
-- `podman`
-  - A generic configuration profile to be used with [Podman](https://podman.io/)
-- `shifter`
-  - A generic configuration profile to be used with [Shifter](https://nersc.gitlab.io/development/shifter/how-to-use/)
-- `charliecloud`
-  - A generic configuration profile to be used with [Charliecloud](https://charliecloud.io/)
-- `apptainer`
-  - A generic configuration profile to be used with [Apptainer](https://apptainer.org/)
-- `wave`
-  - A generic configuration profile to enable [Wave](https://seqera.io/wave/) containers. Use together with one of the above (requires Nextflow ` 24.03.0-edge` or later).
-- `conda`
-  - A generic configuration profile to be used with [Conda](https://conda.io/docs/). Please only use Conda as a last resort i.e. when it's not possible to run the pipeline with Docker, Singularity, Podman, Shifter, Charliecloud, or Apptainer.
+> These options are part of Nextflow and use a _single_ hyphen (pipeline parameters use a double-hyphen).
 
 ### `-resume`
 
-Specify this when restarting a pipeline. Nextflow will use cached results from any pipeline steps where the inputs are the same, continuing from where it got to previously. For input to be considered the same, not only the names must be identical but the files' contents as well. For more info about this parameter, see [this blog post](https://www.nextflow.io/blog/2019/demystifying-nextflow-resume.html).
+Reuse cached results from previous runs. Nextflow will only re-execute steps whose inputs have changed.
 
-You can also supply a run name to resume a specific run: `-resume [run-name]`. Use the `nextflow log` command to show previous run names.
+```bash
+nextflow run alarawms/staphit2 -profile docker --input samplesheet.csv --outdir results -resume
+```
 
 ### `-c`
 
-Specify the path to a specific config file (this is a core Nextflow command). See the [nf-core website documentation](https://nf-co.re/usage/configuration) for more information.
+Specify an additional Nextflow config file. Use this for resource tuning or infrastructure settings, **not** for pipeline parameters (use `-params-file` instead). See the [nf-core configuration docs](https://nf-co.re/docs/usage/configuration) for details.
 
 ## Custom configuration
 
 ### Resource requests
 
-Whilst the default requirements set within the pipeline will hopefully work for most people and with most input data, you may find that you want to customise the compute resources that the pipeline requests. Each step in the pipeline has a default set of requirements for number of CPUs, memory and time. For most of the pipeline steps, if the job exits with any of the error codes specified [here](https://github.com/nf-core/rnaseq/blob/4c27ef5610c87db00c3c5a3eed10b1d161abf575/conf/base.config#L18) it will automatically be resubmitted with higher resources request (2 x original, then 3 x original). If it still fails after the third attempt then the pipeline execution is stopped.
+Default resource requests are defined in `conf/base.config`. Failed jobs are automatically retried with increased resources (up to 3 attempts). To override defaults, see the [nf-core resource tuning guide](https://nf-co.re/docs/usage/configuration#tuning-workflow-resources).
 
-To change the resource requests, please see the [max resources](https://nf-co.re/docs/usage/configuration#max-resources) and [tuning workflow resources](https://nf-co.re/docs/usage/configuration#tuning-workflow-resources) section of the nf-core website.
+### Custom tool arguments
 
-### Custom Containers
-
-In some cases, you may wish to change the container or conda environment used by a pipeline steps for a particular tool. By default, nf-core pipelines use containers and software from the [biocontainers](https://biocontainers.pro/) or [bioconda](https://bioconda.github.io/) projects. However, in some cases the pipeline specified version maybe out of date.
-
-To use a different container from the default container or conda environment specified in a pipeline, please see the [updating tool versions](https://nf-co.re/docs/usage/configuration#updating-tool-versions) section of the nf-core website.
-
-### Custom Tool Arguments
-
-A pipeline might not always support every possible argument or option of a particular tool used in pipeline. Fortunately, nf-core pipelines provide some freedom to users to insert additional parameters that the pipeline does not include by default.
-
-To learn how to provide additional arguments to a particular tool of the pipeline, please see the [customising tool arguments](https://nf-co.re/docs/usage/configuration#customising-tool-arguments) section of the nf-core website.
-
-### nf-core/configs
-
-In most cases, you will only need to create a custom config as a one-off but if you and others within your organisation are likely to be running nf-core pipelines regularly and need to use the same settings regularly it may be a good idea to request that your custom config file is uploaded to the `nf-core/configs` git repository. Before you do this please can you test that the config file works with your pipeline of choice using the `-c` parameter. You can then create a pull request to the `nf-core/configs` repository with the addition of your config file, associated documentation file (see examples in [`nf-core/configs/docs`](https://github.com/nf-core/configs/tree/master/docs)), and amending [`nfcore_custom.config`](https://github.com/nf-core/configs/blob/master/nfcore_custom.config) to include your custom profile.
-
-See the main [Nextflow documentation](https://www.nextflow.io/docs/latest/config.html) for more information about creating your own configuration files.
-
-If you have any questions or issues please send us a message on [Slack](https://nf-co.re/join/slack) on the [`#configs` channel](https://nfcore.slack.com/channels/configs).
+To pass additional arguments to a specific tool, override `ext.args` in a custom config. See the [nf-core tool arguments guide](https://nf-co.re/docs/usage/configuration#customising-tool-arguments).
 
 ## Running in the background
 
-Nextflow handles job submissions and supervises the running jobs. The Nextflow process must run until the pipeline is finished.
+Use `screen`, `tmux`, or the Nextflow `-bg` flag to keep the pipeline running after you disconnect:
 
-The Nextflow `-bg` flag launches Nextflow in the background, detached from your terminal so that the workflow does not stop if you log out of your session. The logs are saved to a file.
-
-Alternatively, you can use `screen` / `tmux` or similar tool to create a detached session which you can log back into at a later time.
-Some HPC setups also allow you to run nextflow within a cluster job submitted your job scheduler (from where it submits more jobs).
+```bash
+nextflow run alarawms/staphit2 -profile docker --input samplesheet.csv --outdir results -bg
+```
 
 ## Nextflow memory requirements
 
-In some cases, the Nextflow Java virtual machines can start to request a large amount of memory.
-We recommend adding the following line to your environment to limit this (typically in `~/.bashrc` or `~./bash_profile`):
+If Nextflow consumes too much memory, add the following to your environment (e.g. `~/.bashrc`):
 
 ```bash
 NXF_OPTS='-Xms1g -Xmx4g'
