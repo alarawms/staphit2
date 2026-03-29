@@ -1,5 +1,6 @@
 process VISUALIZATION {
     label 'process_low'
+    errorStrategy 'ignore'
     publishDir "${params.outdir}/figures", mode: 'copy'
     container 'docker.io/python:3.9'
 
