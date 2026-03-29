@@ -6,17 +6,17 @@ process AGGREGATOR {
 
     input:
     tuple val(meta),
-          path(trim_log, stageAs: 'trim/*'),
-          path(fastqc_files, stageAs: 'fastqc/*'),
-          path(quast_dir, stageAs: 'quast/*'),
-          path(mlst_tsv, stageAs: 'mlst/*'),
-          path(abricate_tabs, stageAs: 'abricate/*'),
-          path(amrfinder_report, stageAs: 'amrfinder/*'),
-          path(mash_sketch, stageAs: 'mash/*'),
-          path(spa_report, stageAs: 'spa/*'),
-          path(sccmec_report, stageAs: 'sccmec/*'),
-          path(agr_report, stageAs: 'agr/*'),
-          path(kma_res, stageAs: 'kma/*'),
+          path(trim_log),
+          path(fastqc_files),
+          path(quast_dir),
+          path(mlst_tsv, stageAs: 'mlst_*.tsv'),
+          path(abricate_tabs),
+          path(amrfinder_report, stageAs: 'amrfinder_*.tsv'),
+          path(mash_sketch),
+          path(spa_report),
+          path(sccmec_report),
+          path(agr_report),
+          path(kma_res, stageAs: 'kma_*.res'),
           path(metadata_json)
 
     output:
@@ -24,20 +24,24 @@ process AGGREGATOR {
     tuple val(meta), path("${meta.id}_summary.csv"), emit: summary
 
     script:
+    def trim_file = trim_log instanceof List ? trim_log[0] : trim_log
+    def mlst_file = mlst_tsv instanceof List ? mlst_tsv[0] : mlst_tsv
+    def amr_file = amrfinder_report instanceof List ? amrfinder_report[0] : amrfinder_report
+    def kma_file = kma_res instanceof List ? kma_res[0] : kma_res
     """
     python3 ${projectDir}/bin/staphit-aggregate \
         --sample-id ${meta.id} \
-        --trim-log trim/${trim_log.name} \
-        --fastqc-dir fastqc \
-        --quast-dir quast \
-        --mlst mlst/${mlst_tsv.name} \
-        --abricate-dir abricate \
-        --amrfinder amrfinder/${amrfinder_report.name} \
-        --mash mash/${mash_sketch.name} \
-        --spa spa/${spa_report.name} \
-        --sccmec sccmec/${sccmec_report.name} \
-        --agr agr/${agr_report.name} \
-        --kma kma/${kma_res.name} \
+        --trim-log ${trim_file} \
+        --fastqc-dir . \
+        --quast-dir ${quast_dir} \
+        --mlst ${mlst_file} \
+        --abricate-dir . \
+        --amrfinder ${amr_file} \
+        --mash ${mash_sketch} \
+        --spa ${spa_report} \
+        --sccmec ${sccmec_report} \
+        --agr ${agr_report} \
+        --kma ${kma_file} \
         --metadata ${metadata_json} \
         --outdir .
     """
