@@ -5,7 +5,19 @@ process AGGREGATOR {
     container 'docker.io/python:3.9'
 
     input:
-    tuple val(meta), path(trim_log), path(fastqc_files), path(quast_dir), path(mlst_tsv), path(abricate_tabs), path(amrfinder_report), path(mash_sketch), path(spa_report), path(sccmec_report), path(agr_report), path(kma_res), path(metadata_json)
+    tuple val(meta),
+          path(trim_log, stageAs: 'trim/*'),
+          path(fastqc_files, stageAs: 'fastqc/*'),
+          path(quast_dir, stageAs: 'quast/*'),
+          path(mlst_tsv, stageAs: 'mlst/*'),
+          path(abricate_tabs, stageAs: 'abricate/*'),
+          path(amrfinder_report, stageAs: 'amrfinder/*'),
+          path(mash_sketch, stageAs: 'mash/*'),
+          path(spa_report, stageAs: 'spa/*'),
+          path(sccmec_report, stageAs: 'sccmec/*'),
+          path(agr_report, stageAs: 'agr/*'),
+          path(kma_res, stageAs: 'kma/*'),
+          path(metadata_json)
 
     output:
     tuple val(meta), path("${meta.id}_report.json"), emit: report
@@ -13,6 +25,20 @@ process AGGREGATOR {
 
     script:
     """
-    python3 ${projectDir}/bin/staphit-aggregate --sample-id ${meta.id} --trim-log ${trim_log} --fastqc-dir . --quast-dir ${quast_dir} --mlst ${mlst_tsv} --abricate-dir . --amrfinder ${amrfinder_report} --mash ${mash_sketch} --spa ${spa_report} --sccmec ${sccmec_report} --agr ${agr_report} --kma ${kma_res} --metadata ${metadata_json} --outdir .
+    python3 ${projectDir}/bin/staphit-aggregate \
+        --sample-id ${meta.id} \
+        --trim-log trim/${trim_log.name} \
+        --fastqc-dir fastqc \
+        --quast-dir quast \
+        --mlst mlst/${mlst_tsv.name} \
+        --abricate-dir abricate \
+        --amrfinder amrfinder/${amrfinder_report.name} \
+        --mash mash/${mash_sketch.name} \
+        --spa spa/${spa_report.name} \
+        --sccmec sccmec/${sccmec_report.name} \
+        --agr agr/${agr_report.name} \
+        --kma kma/${kma_res.name} \
+        --metadata ${metadata_json} \
+        --outdir .
     """
 }
