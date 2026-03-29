@@ -12,8 +12,9 @@ process VISUALIZATION {
 
     script:
     """
-    pip install matplotlib seaborn pandas 2>&1 | tail -1
+    pip install matplotlib seaborn pandas > /dev/null 2>&1 || true
     mkdir -p plots
-    python3 ${projectDir}/bin/staphit-visualize ${summary_tsv} plots || echo "Visualization completed with warnings"
+    python3 ${projectDir}/bin/staphit-visualize ${summary_tsv} plots 2>&1 || true
+    ls -la plots/ || true
     """
 }
