@@ -121,8 +121,7 @@ workflow STAPHIT2 {
 
     VISUALIZATION (
         SUMMARY_MERGER.out.summary,
-        CLUSTERING.out.clusters,
-        Channel.of(file('NO_TREE'))
+        CLUSTERING.out.clusters
     )
 
     // ── MultiQC ─────────────────────────────────────────────────────────────
