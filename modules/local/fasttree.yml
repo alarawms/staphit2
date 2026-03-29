@@ -1,0 +1,25 @@
+name: "fasttree"
+description: Build approximately-maximum-likelihood phylogenetic tree from core alignment using FastTree
+keywords:
+  - phylogenetics
+  - tree
+  - fasttree
+  - phylogenomics
+tools:
+  - fasttree:
+      description: Approximately-maximum-likelihood phylogenetic trees from alignments
+      homepage: http://www.microbesonline.org/fasttree
+      documentation: http://www.microbesonline.org/fasttree
+      licence: ["GPL-2.0"]
+input:
+  - name: alignment
+    type: file
+    description: Multiple sequence alignment in FASTA format
+    pattern: "*.aln"
+output:
+  - name: tree
+    type: file
+    description: Newick-format phylogenetic tree file
+    pattern: "*.treefile"
+authors:
+  - "@alarawms"

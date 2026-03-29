@@ -1,0 +1,33 @@
+name: "validate_metadata"
+description: Validate and normalize clinical metadata and antibiogram data against the samplesheet
+keywords:
+  - metadata
+  - validation
+  - antibiogram
+  - clinical data
+tools:
+  - python:
+      description: Python script (staphit-metadata) for metadata validation and normalization
+      homepage: https://www.python.org
+      documentation: https://www.python.org
+      licence: ["PSF-2.0"]
+input:
+  - name: metadata_csv
+    type: file
+    description: Clinical metadata CSV file
+    pattern: "*.csv"
+  - name: antibiogram_csv
+    type: file
+    description: Antibiogram (AST) results CSV file
+    pattern: "*.csv"
+  - name: samplesheet
+    type: file
+    description: Pipeline samplesheet CSV for cross-validation
+    pattern: "*.csv"
+output:
+  - name: json
+    type: file
+    description: Validated and normalized metadata in JSON format
+    pattern: "metadata.json"
+authors:
+  - "@alarawms"

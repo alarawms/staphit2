@@ -1,0 +1,76 @@
+name: "aggregator"
+description: Aggregate per-sample results from all analysis modules into a unified JSON report and summary CSV
+keywords:
+  - aggregation
+  - summary
+  - report
+  - staphylococcus aureus
+tools:
+  - python:
+      description: Python script (staphit-aggregate) for combining per-sample results
+      homepage: https://www.python.org
+      documentation: https://www.python.org
+      licence: ["PSF-2.0"]
+input:
+  - name: meta
+    type: map
+    description: Groovy Map containing sample information (id)
+  - name: trim_log
+    type: file
+    description: Trimming log file
+    pattern: "*.log"
+  - name: fastqc_files
+    type: file
+    description: FastQC output files
+    pattern: "*"
+  - name: quast_dir
+    type: directory
+    description: QUAST output directory
+    pattern: "*"
+  - name: mlst_tsv
+    type: file
+    description: MLST results TSV
+    pattern: "mlst_*.tsv"
+  - name: abricate_tabs
+    type: file
+    description: ABRicate results tab files
+    pattern: "*.tab"
+  - name: amrfinder_report
+    type: file
+    description: AMRFinderPlus results TSV
+    pattern: "amrfinder_*.tsv"
+  - name: mash_sketch
+    type: file
+    description: Mash sketch file
+    pattern: "*.msh"
+  - name: spa_report
+    type: file
+    description: spa typing results TSV
+    pattern: "*_spatyper.tsv"
+  - name: sccmec_report
+    type: file
+    description: SCCmec typing results TSV
+    pattern: "*_sccmec.tsv"
+  - name: agr_report
+    type: file
+    description: agr typing results JSON
+    pattern: "*_agr.json"
+  - name: kma_res
+    type: file
+    description: KMA resistance results
+    pattern: "kma_*.res"
+  - name: metadata_json
+    type: file
+    description: Validated metadata JSON
+    pattern: "metadata.json"
+output:
+  - name: report
+    type: file
+    description: Comprehensive per-sample report in JSON format
+    pattern: "*_report.json"
+  - name: summary
+    type: file
+    description: Per-sample summary in CSV format
+    pattern: "*_summary.csv"
+authors:
+  - "@alarawms"

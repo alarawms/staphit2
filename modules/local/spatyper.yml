@@ -1,0 +1,27 @@
+name: "spatyper"
+description: Determine Staphylococcus aureus spa type from genome assembly
+keywords:
+  - spa typing
+  - staphylococcus aureus
+  - molecular typing
+tools:
+  - spatyper:
+      description: Computational method for finding spa types from genome assemblies
+      homepage: https://github.com/HCGB-IGTP/spaTyper
+      documentation: https://github.com/HCGB-IGTP/spaTyper
+      licence: ["LGPL-3.0"]
+input:
+  - name: meta
+    type: map
+    description: Groovy Map containing sample information (id)
+  - name: assembly
+    type: file
+    description: Genome assembly FASTA file
+    pattern: "*.fasta"
+output:
+  - name: report
+    type: file
+    description: spa typing results TSV
+    pattern: "*_spatyper.tsv"
+authors:
+  - "@alarawms"

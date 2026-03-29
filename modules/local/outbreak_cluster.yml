@@ -1,0 +1,42 @@
+name: "outbreak_cluster"
+description: Identify outbreak clusters and transmission pairs from SNP and cgMLST distance matrices
+keywords:
+  - outbreak
+  - clustering
+  - transmission
+  - epidemiology
+  - genomic epidemiology
+tools:
+  - python:
+      description: Python script (staphit-cluster) for outbreak cluster detection
+      homepage: https://www.python.org
+      documentation: https://www.python.org
+      licence: ["PSF-2.0"]
+input:
+  - name: snp_dists
+    type: file
+    description: Pairwise SNP distance matrix
+    pattern: "*.tsv"
+  - name: cgmlst_dists
+    type: file
+    description: Pairwise cgMLST allelic distance matrix
+    pattern: "*.tsv"
+  - name: summary_tsv
+    type: file
+    description: Combined sample summary TSV
+    pattern: "*.tsv"
+output:
+  - name: clusters
+    type: file
+    description: Cluster assignments for all samples
+    pattern: "clusters.tsv"
+  - name: report
+    type: file
+    description: Cluster report in JSON format
+    pattern: "cluster_report.json"
+  - name: pairs
+    type: file
+    description: Predicted transmission pairs
+    pattern: "transmission_pairs.tsv"
+authors:
+  - "@alarawms"

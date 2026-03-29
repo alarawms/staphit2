@@ -1,0 +1,45 @@
+name: "kma"
+description: Detect antimicrobial resistance genes using KMA against the ResFinder database (FETCH_RESFINDER_DB + INDEX_DB + KMA)
+keywords:
+  - antimicrobial resistance
+  - kma
+  - resfinder
+  - amr
+tools:
+  - kma:
+      description: K-mer alignment of raw reads against databases for resistance gene detection
+      homepage: https://bitbucket.org/genomicepidemiology/kma
+      documentation: https://bitbucket.org/genomicepidemiology/kma
+      licence: ["Apache-2.0"]
+  - resfinder_db:
+      description: ResFinder resistance gene database
+      homepage: https://bitbucket.org/genomicepidemiology/resfinder_db
+      documentation: https://bitbucket.org/genomicepidemiology/resfinder_db
+      licence: ["Apache-2.0"]
+input:
+  - name: meta
+    type: map
+    description: Groovy Map containing sample information (id)
+  - name: reads
+    type: file
+    description: Paired-end FASTQ reads
+    pattern: "*.fastq.gz"
+  - name: indexed_db
+    type: directory
+    description: KMA-indexed ResFinder database directory
+    pattern: "indexed_db"
+output:
+  - name: db
+    type: directory
+    description: Downloaded ResFinder database (FETCH_RESFINDER_DB output)
+    pattern: "resfinder_db"
+  - name: indexed_db
+    type: directory
+    description: KMA-indexed database (INDEX_DB output)
+    pattern: "indexed_db"
+  - name: results
+    type: file
+    description: KMA resistance gene detection results
+    pattern: "*.res"
+authors:
+  - "@alarawms"

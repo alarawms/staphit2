@@ -1,0 +1,28 @@
+name: "mash"
+description: Create Mash sketch of genome assembly for species confirmation and distance estimation
+keywords:
+  - mash
+  - species identification
+  - sketching
+  - genomic distance
+tools:
+  - mash:
+      description: Fast genome and metagenome distance estimation using MinHash
+      homepage: https://github.com/marbl/Mash
+      documentation: https://mash.readthedocs.io
+      licence: ["BSD-3-Clause"]
+input:
+  - name: meta
+    type: map
+    description: Groovy Map containing sample information (id)
+  - name: assembly
+    type: file
+    description: Genome assembly FASTA file
+    pattern: "*.fasta"
+output:
+  - name: sketch
+    type: file
+    description: Mash sketch file
+    pattern: "*.msh"
+authors:
+  - "@alarawms"

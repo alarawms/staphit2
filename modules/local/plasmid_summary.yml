@@ -1,0 +1,25 @@
+name: "plasmid_summary"
+description: Summarize plasmid content across samples from MOB_RECON output directories
+keywords:
+  - plasmid
+  - summary
+  - mob-suite
+  - mobile genetic elements
+tools:
+  - python:
+      description: Python script for parsing MOB_RECON contig reports and mobtyper results
+      homepage: https://www.python.org
+      documentation: https://www.python.org
+      licence: ["PSF-2.0"]
+input:
+  - name: mob_dirs
+    type: directory
+    description: Collection of MOB_RECON output directories
+    pattern: "*_mob"
+output:
+  - name: summary
+    type: file
+    description: Plasmid summary TSV with counts and mobility predictions per sample
+    pattern: "plasmid_summary.tsv"
+authors:
+  - "@alarawms"

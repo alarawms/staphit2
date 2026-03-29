@@ -1,0 +1,32 @@
+name: "checkm2"
+description: Assess genome assembly quality (completeness and contamination) using CheckM2
+keywords:
+  - quality control
+  - checkm2
+  - completeness
+  - contamination
+tools:
+  - checkm2:
+      description: Rapid assessment of genome bin quality using machine learning
+      homepage: https://github.com/chklovski/CheckM2
+      documentation: https://github.com/chklovski/CheckM2
+      licence: ["GPL-3.0"]
+input:
+  - name: meta
+    type: map
+    description: Groovy Map containing sample information (id)
+  - name: assembly
+    type: file
+    description: Genome assembly FASTA file
+    pattern: "*.fasta"
+  - name: db_file
+    type: file
+    description: CheckM2 DIAMOND database file
+    pattern: "uniref100.KO.1.dmnd"
+output:
+  - name: report
+    type: file
+    description: Quality report TSV with completeness and contamination metrics
+    pattern: "*_quality_report.tsv"
+authors:
+  - "@alarawms"

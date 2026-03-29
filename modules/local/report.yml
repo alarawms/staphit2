@@ -1,0 +1,36 @@
+name: "report"
+description: Generate a Markdown run report summarizing all pipeline results
+keywords:
+  - report
+  - summary
+  - markdown
+tools:
+  - python:
+      description: Python script (staphit-report) for generating the final run report
+      homepage: https://www.python.org
+      documentation: https://www.python.org
+      licence: ["PSF-2.0"]
+input:
+  - name: summary_tsv
+    type: file
+    description: Combined sample summary TSV
+    pattern: "*.tsv"
+  - name: clusters
+    type: file
+    description: Cluster assignments TSV
+    pattern: "clusters.tsv"
+  - name: qc_report
+    type: file
+    description: QC gate report
+    pattern: "qc_report.tsv"
+  - name: plasmid_summary
+    type: file
+    description: Plasmid summary TSV
+    pattern: "plasmid_summary.tsv"
+output:
+  - name: report
+    type: file
+    description: Final Markdown run report
+    pattern: "run_report.md"
+authors:
+  - "@alarawms"

@@ -1,0 +1,36 @@
+name: "sccmec"
+description: Determine SCCmec cassette type and mecA presence from genome assembly
+keywords:
+  - sccmec
+  - methicillin resistance
+  - staphylococcus aureus
+  - molecular typing
+tools:
+  - sccmec_typer:
+      description: SCCmec cassette typing tool for Staphylococcus aureus
+      homepage: https://github.com/alarawms/sccmec_typer
+      documentation: https://github.com/alarawms/sccmec_typer
+      licence: ["MIT"]
+input:
+  - name: meta
+    type: map
+    description: Groovy Map containing sample information (id)
+  - name: assembly
+    type: file
+    description: Genome assembly FASTA file
+    pattern: "*.fasta"
+output:
+  - name: report
+    type: file
+    description: SCCmec typing results TSV
+    pattern: "*_sccmec.tsv"
+  - name: svg
+    type: file
+    description: SCCmec cassette structure visualization (SVG)
+    pattern: "*_sccmec.svg"
+  - name: html
+    type: file
+    description: SCCmec cassette structure visualization (HTML)
+    pattern: "*_sccmec.html"
+authors:
+  - "@alarawms"

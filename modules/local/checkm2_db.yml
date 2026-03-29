@@ -1,0 +1,20 @@
+name: "checkm2_db"
+description: Download the CheckM2 reference database (uniref100.KO.1.dmnd)
+keywords:
+  - checkm2
+  - database
+  - quality control
+tools:
+  - checkm2:
+      description: Rapid assessment of genome bin quality using machine learning
+      homepage: https://github.com/chklovski/CheckM2
+      documentation: https://github.com/chklovski/CheckM2
+      licence: ["GPL-3.0"]
+input: []
+output:
+  - name: db
+    type: file
+    description: CheckM2 DIAMOND database file
+    pattern: "uniref100.KO.1.dmnd"
+authors:
+  - "@alarawms"

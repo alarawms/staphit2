@@ -1,0 +1,41 @@
+name: "snippy"
+description: Call SNPs from reads against a reference using Snippy, then build core SNP alignment (SNIPPY + SNIPPY_CORE)
+keywords:
+  - snp
+  - variant calling
+  - snippy
+  - core genome
+  - phylogenomics
+tools:
+  - snippy:
+      description: Rapid haploid variant calling and core genome alignment
+      homepage: https://github.com/tseemann/snippy
+      documentation: https://github.com/tseemann/snippy
+      licence: ["GPL-2.0"]
+input:
+  - name: meta
+    type: map
+    description: Groovy Map containing sample information (id)
+  - name: reads
+    type: file
+    description: Paired-end FASTQ reads
+    pattern: "*.fastq.gz"
+  - name: reference
+    type: file
+    description: Reference genome FASTA for SNP calling
+    pattern: "*.fasta"
+  - name: snippy_dirs
+    type: directory
+    description: Collection of per-sample Snippy output directories (SNIPPY_CORE input)
+    pattern: "*"
+output:
+  - name: results
+    type: directory
+    description: Per-sample Snippy output directory
+    pattern: "${meta.id}"
+  - name: aln
+    type: file
+    description: Core SNP alignment in FASTA format (SNIPPY_CORE output)
+    pattern: "core.aln"
+authors:
+  - "@alarawms"

@@ -1,0 +1,61 @@
+name: "chewbbaca"
+description: Perform cgMLST allele calling, profile joining, and distance calculation using chewBBACA (CHEWBBACA_PREP + CHEWBBACA_ALLELE + CHEWBBACA_JOIN + CGMLST_DISTS)
+keywords:
+  - cgmlst
+  - allele calling
+  - chewbbaca
+  - molecular typing
+  - genomic epidemiology
+tools:
+  - chewbbaca:
+      description: Comprehensive pipeline for cgMLST/wgMLST schema creation and allele calling
+      homepage: https://github.com/B-UMMI/chewBBACA
+      documentation: https://chewbbaca.readthedocs.io
+      licence: ["GPL-3.0"]
+input:
+  - name: meta
+    type: map
+    description: Groovy Map containing sample information (id)
+  - name: assembly
+    type: file
+    description: Genome assembly FASTA file
+    pattern: "*.fasta"
+  - name: schema_fasta_dir
+    type: directory
+    description: Directory containing cgMLST schema locus FASTA files (CHEWBBACA_PREP input)
+    pattern: "*"
+  - name: schema
+    type: directory
+    description: Prepared chewBBACA schema directory (CHEWBBACA_ALLELE input)
+    pattern: "prepared_schema"
+  - name: profiles
+    type: file
+    description: Collection of allele profile TSVs (CHEWBBACA_JOIN and CGMLST_DISTS input)
+    pattern: "*.tsv"
+output:
+  - name: schema
+    type: directory
+    description: Prepared chewBBACA schema (CHEWBBACA_PREP output)
+    pattern: "prepared_schema"
+  - name: profile
+    type: file
+    description: Per-sample allele profile (CHEWBBACA_ALLELE output)
+    pattern: "results/results_alleles.tsv"
+  - name: stats
+    type: file
+    description: Per-sample allele calling statistics (CHEWBBACA_ALLELE output)
+    pattern: "results/results_statistics.tsv"
+  - name: profiles
+    type: file
+    description: Joined allele profiles for all samples (CHEWBBACA_JOIN output)
+    pattern: "cgmlst_profiles.tsv"
+  - name: cgmlst_stats
+    type: file
+    description: cgMLST locus call statistics per sample (CHEWBBACA_JOIN output)
+    pattern: "cgmlst_stats.tsv"
+  - name: distances
+    type: file
+    description: Pairwise cgMLST allelic distance matrix (CGMLST_DISTS output)
+    pattern: "cgmlst_distances.tsv"
+authors:
+  - "@alarawms"

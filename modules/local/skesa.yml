@@ -1,0 +1,28 @@
+name: "skesa"
+description: De novo genome assembly using SKESA (Strategic K-mer Extension for Scrupulous Assemblies)
+keywords:
+  - assembly
+  - de novo
+  - skesa
+  - genomics
+tools:
+  - skesa:
+      description: NCBI de novo genome assembler designed for short reads
+      homepage: https://github.com/ncbi/SKESA
+      documentation: https://github.com/ncbi/SKESA
+      licence: ["Public Domain"]
+input:
+  - name: meta
+    type: map
+    description: Groovy Map containing sample information (id)
+  - name: reads
+    type: file
+    description: Paired-end FASTQ reads
+    pattern: "*.fastq.gz"
+output:
+  - name: scaffolds
+    type: file
+    description: Assembled scaffolds in FASTA format
+    pattern: "*.scaffolds.fasta"
+authors:
+  - "@alarawms"

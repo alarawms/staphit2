@@ -1,0 +1,32 @@
+name: "qc_gate"
+description: Apply quality thresholds to CheckM2 reports and partition samples into pass/fail
+keywords:
+  - quality control
+  - filtering
+  - qc gate
+tools:
+  - python:
+      description: Python script (staphit-qc) for QC gating
+      homepage: https://www.python.org
+      documentation: https://www.python.org
+      licence: ["PSF-2.0"]
+input:
+  - name: reports
+    type: file
+    description: Directory of CheckM2 quality report TSV files
+    pattern: "reports/*"
+output:
+  - name: report
+    type: file
+    description: Combined QC report for all samples
+    pattern: "qc_report.tsv"
+  - name: passed
+    type: file
+    description: List of sample IDs that passed QC
+    pattern: "passed_samples.txt"
+  - name: failed
+    type: file
+    description: List of sample IDs that failed QC
+    pattern: "failed_samples.txt"
+authors:
+  - "@alarawms"

@@ -1,0 +1,29 @@
+name: "abricate_multi"
+description: Screen genome assembly against multiple ABRicate databases (ResFinder, VFDB, PlasmidFinder)
+keywords:
+  - abricate
+  - antimicrobial resistance
+  - virulence
+  - plasmid
+  - amr
+tools:
+  - abricate:
+      description: Mass screening of contigs for antimicrobial resistance or virulence genes
+      homepage: https://github.com/tseemann/abricate
+      documentation: https://github.com/tseemann/abricate
+      licence: ["GPL-2.0"]
+input:
+  - name: meta
+    type: map
+    description: Groovy Map containing sample information (id)
+  - name: assembly
+    type: file
+    description: Genome assembly FASTA file
+    pattern: "*.fasta"
+output:
+  - name: reports
+    type: file
+    description: ABRicate result files for each database (resfinder, vfdb, plasmidfinder)
+    pattern: "*.tab"
+authors:
+  - "@alarawms"

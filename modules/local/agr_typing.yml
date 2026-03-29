@@ -1,0 +1,28 @@
+name: "agr_typing"
+description: Assign accessory gene regulator (agr) group from genome assembly
+keywords:
+  - agr
+  - virulence
+  - staphylococcus aureus
+  - molecular typing
+tools:
+  - staph_agr_typer:
+      description: Tool for agr group typing of Staphylococcus aureus
+      homepage: https://github.com/alarawms/staph_agr_typer
+      documentation: https://github.com/alarawms/staph_agr_typer
+      licence: ["MIT"]
+input:
+  - name: meta
+    type: map
+    description: Groovy Map containing sample information (id)
+  - name: assembly
+    type: file
+    description: Genome assembly FASTA file
+    pattern: "*.fasta"
+output:
+  - name: report
+    type: file
+    description: agr typing result in JSON format
+    pattern: "*_agr.json"
+authors:
+  - "@alarawms"

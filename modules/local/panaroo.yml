@@ -1,0 +1,33 @@
+name: "panaroo"
+description: Build pangenome and core gene alignment using Panaroo
+keywords:
+  - pangenome
+  - panaroo
+  - core genome
+  - gene presence absence
+tools:
+  - panaroo:
+      description: An updated pipeline for pangenome investigation with error correction
+      homepage: https://github.com/gtonkinhill/panaroo
+      documentation: https://gtonkinhill.github.io/panaroo
+      licence: ["MIT"]
+input:
+  - name: gffs
+    type: file
+    description: Annotated GFF3 files from all samples
+    pattern: "*.gff"
+output:
+  - name: aln
+    type: file
+    description: Core gene alignment in FASTA format
+    pattern: "core_gene_alignment.aln"
+  - name: gene_presence_absence
+    type: file
+    description: Gene presence/absence matrix
+    pattern: "gene_presence_absence.csv"
+  - name: pan_genome_reference
+    type: file
+    description: Pangenome reference FASTA
+    pattern: "pan_genome_reference.fa"
+authors:
+  - "@alarawms"

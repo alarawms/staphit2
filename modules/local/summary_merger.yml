@@ -1,0 +1,24 @@
+name: "summary_merger"
+description: Merge per-sample summary CSV files into a single combined TSV
+keywords:
+  - merge
+  - summary
+  - concatenation
+tools:
+  - python:
+      description: Shell commands for concatenating CSV files
+      homepage: https://www.python.org
+      documentation: https://www.python.org
+      licence: ["PSF-2.0"]
+input:
+  - name: sample_summaries
+    type: file
+    description: Collection of per-sample summary CSV files
+    pattern: "*.csv"
+output:
+  - name: summary
+    type: file
+    description: Combined summary TSV with all samples
+    pattern: "combined_summary.tsv"
+authors:
+  - "@alarawms"

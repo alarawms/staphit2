@@ -1,0 +1,44 @@
+name: "mob_recon"
+description: Reconstruct plasmids from assemblies using MOB-suite (MOB_INIT + MOB_RECON)
+keywords:
+  - plasmid
+  - mob-suite
+  - mob_recon
+  - mobile genetic elements
+tools:
+  - mob-suite:
+      description: Software tools for clustering, reconstruction, and typing of plasmids from draft assemblies
+      homepage: https://github.com/phac-nml/mob-suite
+      documentation: https://github.com/phac-nml/mob-suite
+      licence: ["Apache-2.0"]
+input:
+  - name: meta
+    type: map
+    description: Groovy Map containing sample information (id)
+  - name: assembly
+    type: file
+    description: Genome assembly FASTA file
+    pattern: "*.fasta"
+  - name: mob_db
+    type: directory
+    description: MOB-suite database directory (from MOB_INIT)
+    pattern: "mob_db"
+output:
+  - name: db
+    type: directory
+    description: MOB-suite database directory (MOB_INIT output)
+    pattern: "mob_db"
+  - name: contig_report
+    type: file
+    description: Per-contig classification report
+    pattern: "*_mob/contig_report.txt"
+  - name: mobtyper
+    type: file
+    description: MOB-typer results for identified plasmids
+    pattern: "*_mob/mobtyper_results.txt"
+  - name: full_output
+    type: directory
+    description: Full MOB_RECON output directory
+    pattern: "*_mob"
+authors:
+  - "@alarawms"

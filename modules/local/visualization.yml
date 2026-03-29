@@ -1,0 +1,40 @@
+name: "visualization"
+description: Generate publication-quality figures from pipeline summary data
+keywords:
+  - visualization
+  - figures
+  - plots
+  - matplotlib
+  - seaborn
+tools:
+  - python:
+      description: Python script (staphit-visualize) using matplotlib and seaborn
+      homepage: https://www.python.org
+      documentation: https://www.python.org
+      licence: ["PSF-2.0"]
+  - matplotlib:
+      description: Comprehensive library for creating static, animated, and interactive visualizations in Python
+      homepage: https://matplotlib.org
+      documentation: https://matplotlib.org/stable/contents.html
+      licence: ["PSF-2.0"]
+  - seaborn:
+      description: Statistical data visualization library built on matplotlib
+      homepage: https://seaborn.pydata.org
+      documentation: https://seaborn.pydata.org
+      licence: ["BSD-3-Clause"]
+input:
+  - name: summary_tsv
+    type: file
+    description: Combined sample summary TSV
+    pattern: "*.tsv"
+  - name: clusters
+    type: file
+    description: Cluster assignments TSV
+    pattern: "clusters.tsv"
+output:
+  - name: plots
+    type: file
+    description: Publication-quality PNG figures
+    pattern: "plots/*.png"
+authors:
+  - "@alarawms"
