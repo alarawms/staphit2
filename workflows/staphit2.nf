@@ -66,19 +66,27 @@ workflow STAPHIT2 {
     ch_versions = ch_versions.mix(PHYLOGENY.out.versions)
 
     // ── Phase 6: Per-sample Aggregation ─────────────────────────────────────
-    // Join all per-sample outputs by meta.id
-    // All typing tools produce fallback output on failure, so no nulls expected
-    ch_agg_in = QC_ASSEMBLY.out.trim_log
-        .join(QC_ASSEMBLY.out.fastqc_zip)
-        .join(QC_ASSEMBLY.out.quast_results)
-        .join(SA_TYPING.out.mlst)
-        .join(AMR_DETECTION.out.abricate)
-        .join(AMR_DETECTION.out.amrfinder)
-        .join(SA_TYPING.out.mash)
-        .join(SA_TYPING.out.spa)
-        .join(SA_TYPING.out.sccmec)
-        .join(SA_TYPING.out.agr)
-        .join(AMR_DETECTION.out.kma)
+    // Normalize all channels to [sample_id, path] before joining
+    // (nf-core modules may modify meta maps, breaking join on meta)
+    def to_id = { meta, path -> [ meta.id, path ] }
+
+    ch_agg_in = QC_ASSEMBLY.out.trim_log.map(to_id)
+        .join(QC_ASSEMBLY.out.fastqc_zip.map(to_id))
+        .join(QC_ASSEMBLY.out.quast_results.map(to_id))
+        .join(SA_TYPING.out.mlst.map(to_id))
+        .join(AMR_DETECTION.out.abricate.map(to_id))
+        .join(AMR_DETECTION.out.amrfinder.map(to_id))
+        .join(SA_TYPING.out.mash.map(to_id))
+        .join(SA_TYPING.out.spa.map(to_id))
+        .join(SA_TYPING.out.sccmec.map(to_id))
+        .join(SA_TYPING.out.agr.map(to_id))
+        .join(AMR_DETECTION.out.kma.map(to_id))
+        .map { items ->
+            // Reconstruct meta from sample_id
+            def sid = items[0]
+            def meta = [id: sid]
+            [ meta ] + items[1..-1]
+        }
 
     // Broadcast metadata JSON to all samples (or placeholder if not provided)
     ch_metadata = params.metadata
