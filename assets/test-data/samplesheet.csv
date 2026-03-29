@@ -1,0 +1,6 @@
+sample,fastq_1,fastq_2
+ID00395,${projectDir}/assets/test-data/ID00395_R1.fastq.gz,${projectDir}/assets/test-data/ID00395_R2.fastq.gz
+ID00396,${projectDir}/assets/test-data/ID00396_R1.fastq.gz,${projectDir}/assets/test-data/ID00396_R2.fastq.gz
+ID00397,${projectDir}/assets/test-data/ID00397_R1.fastq.gz,${projectDir}/assets/test-data/ID00397_R2.fastq.gz
+ID00398,${projectDir}/assets/test-data/ID00398_R1.fastq.gz,${projectDir}/assets/test-data/ID00398_R2.fastq.gz
+ID00399,${projectDir}/assets/test-data/ID00399_R1.fastq.gz,${projectDir}/assets/test-data/ID00399_R2.fastq.gz
