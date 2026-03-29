@@ -66,19 +66,19 @@ workflow STAPHIT2 {
     ch_versions = ch_versions.mix(PHYLOGENY.out.versions)
 
     // ── Phase 6: Per-sample Aggregation ─────────────────────────────────────
-    // Join all per-sample outputs by meta.id into a single tuple for AGGREGATOR
-    // Use failOnMismatch: false to handle samples where some tools may have failed
+    // Join all per-sample outputs by meta.id
+    // All typing tools produce fallback output on failure, so no nulls expected
     ch_agg_in = QC_ASSEMBLY.out.trim_log
-        .join(QC_ASSEMBLY.out.fastqc_zip, failOnMismatch: false, remainder: true)
-        .join(QC_ASSEMBLY.out.quast_results, failOnMismatch: false, remainder: true)
-        .join(SA_TYPING.out.mlst, failOnMismatch: false, remainder: true)
-        .join(AMR_DETECTION.out.abricate, failOnMismatch: false, remainder: true)
-        .join(AMR_DETECTION.out.amrfinder, failOnMismatch: false, remainder: true)
-        .join(SA_TYPING.out.mash, failOnMismatch: false, remainder: true)
-        .join(SA_TYPING.out.spa, failOnMismatch: false, remainder: true)
-        .join(SA_TYPING.out.sccmec, failOnMismatch: false, remainder: true)
-        .join(SA_TYPING.out.agr, failOnMismatch: false, remainder: true)
-        .join(AMR_DETECTION.out.kma, failOnMismatch: false, remainder: true)
+        .join(QC_ASSEMBLY.out.fastqc_zip)
+        .join(QC_ASSEMBLY.out.quast_results)
+        .join(SA_TYPING.out.mlst)
+        .join(AMR_DETECTION.out.abricate)
+        .join(AMR_DETECTION.out.amrfinder)
+        .join(SA_TYPING.out.mash)
+        .join(SA_TYPING.out.spa)
+        .join(SA_TYPING.out.sccmec)
+        .join(SA_TYPING.out.agr)
+        .join(AMR_DETECTION.out.kma)
 
     // Broadcast metadata JSON to all samples (or placeholder if not provided)
     ch_metadata = params.metadata
