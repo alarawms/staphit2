@@ -11,6 +11,7 @@ process SPATYPER {
 
     script:
     """
-    spaTyper -f ${assembly} --output ${meta.id}_spatyper.tsv
+    spaTyper -f ${assembly} --output ${meta.id}_spatyper.tsv 2>/dev/null || \
+        echo -e "File\\tRepeats\\tType\\n${meta.id}\\tND\\tND" > ${meta.id}_spatyper.tsv
     """
 }

@@ -6,16 +6,17 @@ process REPORT {
     input:
     path summary_tsv
     path clusters
-    path trees
+    path qc_report
+    path plasmid_summary
 
     output:
-    path "staphit_report.html", emit: html
-    path "staphit_report.json", emit: json
+    path "run_report.md", emit: report
 
     script:
     def cluster_flag = clusters.name != 'NO_CLUSTERS' ? "--clusters ${clusters}" : ''
-    def tree_flag = trees.name != 'NO_TREES' ? "--trees ${trees}" : ''
+    def qc_flag = qc_report.name != 'NO_QC' ? "--qc ${qc_report}" : ''
+    def plasmid_flag = plasmid_summary.name != 'NO_PLASMIDS' ? "--plasmids ${plasmid_summary}" : ''
     """
-    python3 ${projectDir}/bin/staphit-report --summary ${summary_tsv} ${cluster_flag} ${tree_flag} -o .
+    python3 ${projectDir}/bin/staphit-report --summary ${summary_tsv} ${cluster_flag} ${qc_flag} ${plasmid_flag} -o run_report.md
     """
 }
