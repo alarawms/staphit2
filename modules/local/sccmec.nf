@@ -12,8 +12,7 @@ process SCCMEC {
 
     script:
     """
-    python3 /app/bin/sccmec_typer.py --1 ${assembly} -d /app/db -o ${meta.id}_sccmec --no-viz 2>/dev/null && \
-        mv ${meta.id}_sccmec.tsv ${meta.id}_sccmec.tsv 2>/dev/null || \
+    python3 /app/bin/sccmec_typer.py --1 ${assembly} -d /app/db -o ${meta.id}_sccmec --no-viz 2>/dev/null || \
         echo -e "Sample\\tStatus\\tmecA_Present\\tSCCmec_Type\\n${meta.id}\\tND\\tND\\tND" > ${meta.id}_sccmec.tsv
     """
 }
