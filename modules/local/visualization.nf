@@ -16,6 +16,7 @@ process VISUALIZATION {
     def cluster_flag = clusters.name != 'NO_CLUSTERS' ? "--clusters ${clusters}" : ''
     def tree_flag = trees.name != 'NO_TREES' ? "--trees ${trees}" : ''
     """
-    python3 ${projectDir}/bin/staphit-visualize --summary ${summary_tsv} ${cluster_flag} ${tree_flag} -o .
+    pip install matplotlib seaborn pandas > /dev/null 2>&1
+    python3 ${projectDir}/bin/staphit-visualize ${summary_tsv} . ${cluster_flag} ${tree_flag} || true
     """
 }
