@@ -69,7 +69,10 @@ workflow QC_ASSEMBLY {
     // Select primary assembly based on --assembler param
     // SKESA outputs plain FASTA, SPAdes nf-core outputs .gz
     //
-    ch_assemblies = ch_skesa_scaffolds
+    // Filter out junk assemblies (S. aureus ~2.8 Mb; anything under 500 KB is junk)
+    ch_assemblies = ch_skesa_scaffolds.filter { meta, fasta ->
+        fasta.size() > 500000
+    }
 
     //
     // MODULE: Assembly QC with QUAST
