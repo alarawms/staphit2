@@ -226,13 +226,13 @@ def parse_amrfinder(tsv_path):
         reader = csv.DictReader(f, delimiter='\t')
         for row in reader:
             item = {
-                'gene': row.get('Gene symbol'),
+                'gene': row.get('Element symbol') or row.get('Gene symbol'),
                 'coverage': float(row.get('% Coverage of reference', row.get('% Coverage', 0))),
                 'identity': float(row.get('% Identity to reference', row.get('% Identity', 0))),
-                'accession': row.get('Accession of closest sequence'),
-                'product': row.get('Sequence name'),
-                'element_type': row.get('Element type'),
-                'element_subtype': row.get('Element subtype') or row.get('Subtype'),
+                'accession': row.get('Closest reference accession') or row.get('Accession of closest sequence'),
+                'product': row.get('Element name') or row.get('Sequence name'),
+                'element_type': row.get('Type') or row.get('Element type'),
+                'element_subtype': row.get('Subtype') or row.get('Element subtype'),
                 'class': row.get('Class'),
                 'subclass': row.get('Subclass'),
             }

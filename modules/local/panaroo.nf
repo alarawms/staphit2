@@ -24,6 +24,15 @@ process PANAROO {
         echo "Not enough valid samples for Panaroo. Skipping."
         exit 0
     fi
-    panaroo -i *.gff -o . --clean-mode ${params.panaroo_clean} --remove-invalid-genes -a core --core_threshold ${params.panaroo_threshold} --aligner ${params.panaroo_aligner} -t ${task.cpus}
+    panaroo -i *.gff -o . \
+        --clean-mode ${params.panaroo_clean} \
+        --remove-invalid-genes \
+        -a core \
+        --core_threshold ${params.panaroo_threshold} \
+        --aligner ${params.panaroo_aligner} \
+        -c ${params.panaroo_identity} \
+        -f ${params.panaroo_family_threshold} \
+        ${params.panaroo_entropy_filter ? "--core_entropy_filter ${params.panaroo_entropy_filter}" : ''} \
+        -t ${task.cpus}
     """
 }
