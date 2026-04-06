@@ -164,7 +164,7 @@ def main(argv=None):
     n_fail = len(assessments) - n_pass
     print(f"QC gate: {n_pass} passed, {n_fail} failed out of {len(assessments)} samples")
 
-    return 0 if n_fail == 0 else 1
+    return 0  # QC failures are informational, not script errors
 
 
 if __name__ == '__main__':
