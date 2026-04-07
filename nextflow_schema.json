@@ -338,12 +338,13 @@
             "properties": {
                 "phylo_method": {
                     "type": "string",
-                    "default": "panaroo",
+                    "default": "both",
                     "enum": [
                         "panaroo",
-                        "snippy"
+                        "snippy",
+                        "both"
                     ],
-                    "description": "Core alignment method: pangenome (panaroo) or reference-based (snippy)."
+                    "description": "Phylogeny method: panaroo (tree), snippy (clustering), or both (recommended)."
                 },
                 "tree_builder": {
                     "type": "string",
