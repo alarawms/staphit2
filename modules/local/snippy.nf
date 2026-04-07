@@ -1,6 +1,7 @@
 process SNIPPY {
     tag "$meta.id"
     label 'process_medium'
+    publishDir "${params.outdir}/snippy/${meta.id}", mode: 'link'
     container 'docker.io/staphb/snippy:4.6.0'
 
     input:
