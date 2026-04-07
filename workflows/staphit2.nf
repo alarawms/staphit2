@@ -105,8 +105,10 @@ workflow STAPHIT2 {
     // ── Phase 7: Outbreak Clustering ────────────────────────────────────────
     ch_cgmlst_dists = Channel.of(file('NO_CGMLST_DISTS'))
 
+    // Use Snippy whole-genome distances for clustering (more discriminatory)
+    // Falls back to Panaroo core gene distances if Snippy not run
     CLUSTERING (
-        PHYLOGENY.out.snp_dists.map { meta, tsv -> tsv },
+        PHYLOGENY.out.cluster_dists.map { meta, tsv -> tsv },
         ch_cgmlst_dists,
         SUMMARY_MERGER.out.summary
     )
