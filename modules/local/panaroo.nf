@@ -1,6 +1,7 @@
 process PANAROO {
     label 'process_high'
     publishDir "${params.outdir}/panaroo", mode: 'copy'
+    errorStrategy 'ignore'
     container 'docker.io/staphb/panaroo:1.3.4'
 
     input:
