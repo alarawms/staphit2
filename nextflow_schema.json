@@ -395,6 +395,24 @@
                     "type": "integer",
                     "default": 100,
                     "description": "Snippy minimum mapping quality."
+                },
+                "panaroo_identity": {
+                    "type": "number",
+                    "default": 0.98,
+                    "description": "Panaroo sequence identity threshold for gene clustering.",
+                    "minimum": 0.5,
+                    "maximum": 1.0
+                },
+                "panaroo_family_threshold": {
+                    "type": "number",
+                    "default": 0.7,
+                    "description": "Panaroo protein family identity threshold.",
+                    "minimum": 0.1,
+                    "maximum": 1.0
+                },
+                "panaroo_entropy_filter": {
+                    "type": "number",
+                    "description": "BMGE entropy filter (0.0-1.0). Null for auto Tukey method."
                 }
             }
         },
