@@ -171,7 +171,7 @@ def merge_cluster_assignments(snp_tiers, cgmlst_tiers, snp_thresholds,
 # ---------------------------------------------------------------------------
 
 
-def build_cluster_report(merged, summary_data, snp_matrix):
+def build_cluster_report(merged, summary_data, snp_matrix, tier_thresholds=None):
     """Build a report for each multi-sample cluster.
 
     For each cluster with >1 sample: date_range, locations,
@@ -213,10 +213,10 @@ def build_cluster_report(merged, summary_data, snp_matrix):
                 info = summary_by_id.get(s, {})
                 if info.get('collection_date'):
                     dates.append(info['collection_date'])
-                if info.get('location'):
-                    locations.add(info['location'])
-                if info.get('st'):
-                    sts.add(info['st'])
+                if info.get('infection_origin'):
+                    locations.add(info['infection_origin'])
+                if info.get('mlst_st'):
+                    sts.add(info['mlst_st'])
                 if info.get('spa_type'):
                     spas.add(info['spa_type'])
                 if info.get('amrfinder_genes'):
@@ -229,7 +229,17 @@ def build_cluster_report(merged, summary_data, snp_matrix):
                 cluster_info['date_range'] = []
 
             cluster_info['locations'] = sorted(locations)
-            cluster_info['shared_st'] = sorted(sts)[0] if len(sts) == 1 else None
+            if len(sts) == 1:
+                cluster_info['shared_st'] = sorted(sts)[0]
+            elif sts:
+                from collections import Counter
+                st_counts = Counter(summary_by_id.get(s, {}).get('mlst_st', '') for s in members)
+                st_counts.pop('', None)
+                dominant = st_counts.most_common(1)[0][0] if st_counts else None
+                cluster_info['shared_st'] = f"{dominant}+{len(sts)-1}others"
+            else:
+                cluster_info['shared_st'] = None
+            cluster_info['n_unique_sts'] = len(sts)
             cluster_info['shared_spa'] = sorted(spas)[0] if len(spas) == 1 else None
 
             if resistance_sets:
@@ -247,6 +257,16 @@ def build_cluster_report(merged, summary_data, snp_matrix):
                     d = snp_matrix.get((s1, s2), snp_matrix.get((s2, s1), 0))
                     max_dist = max(max_dist, d)
             cluster_info['max_snp_distance'] = max_dist
+            # Flag chain-linked clusters where diameter > 2x tier threshold
+            tier_names_list = ['direct_transmission', 'outbreak', 'related']
+            if tier_thresholds and tier_name in tier_names_list:
+                idx = tier_names_list.index(tier_name)
+                if idx < len(tier_thresholds) and max_dist > 2 * tier_thresholds[idx]:
+                    cluster_info['chain_linked'] = True
+                else:
+                    cluster_info['chain_linked'] = False
+            else:
+                cluster_info['chain_linked'] = False
 
             reports.append(cluster_info)
 
@@ -281,12 +301,12 @@ def find_transmission_pairs(snp_matrix, threshold, summary_data):
         info1 = summary_by_id.get(s1, {})
         info2 = summary_by_id.get(s2, {})
 
-        same_st = bool(info1.get('st') and info2.get('st')
-                       and info1['st'] == info2['st'])
+        same_st = bool(info1.get('mlst_st') and info2.get('mlst_st')
+                       and info1['mlst_st'] == info2['mlst_st'])
         same_spa = bool(info1.get('spa_type') and info2.get('spa_type')
                         and info1['spa_type'] == info2['spa_type'])
-        same_location = bool(info1.get('location') and info2.get('location')
-                             and info1['location'] == info2['location'])
+        same_location = bool(info1.get('infection_origin') and info2.get('infection_origin')
+                             and info1['infection_origin'] == info2['infection_origin'])
 
         pairs.append({
             'sample_1': pair[0],
@@ -358,7 +378,8 @@ def main():
     summary_data = _load_summary(args.summary) if args.summary else []
 
     # Build report
-    report = build_cluster_report(merged, summary_data, snp_matrix)
+    report = build_cluster_report(merged, summary_data, snp_matrix,
+                                   tier_thresholds=snp_thresholds)
 
     # Transmission pairs (using first SNP threshold = direct transmission)
     pairs = find_transmission_pairs(snp_matrix, snp_thresholds[0], summary_data)

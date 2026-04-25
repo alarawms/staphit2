@@ -22,15 +22,23 @@ input:
 output:
   - name: report
     type: file
-    description: SCCmec typing results TSV
+    description: SCCmec typing results TSV (includes Estimated_Type and Estimation_Score for partial/fragmented assemblies)
     pattern: "*_sccmec.tsv"
+  - name: json
+    type: file
+    description: Full classification with confidence scores, estimation, and gene locations
+    pattern: "*_sccmec.json"
+  - name: elements
+    type: file
+    description: Per-gene alignment details (coordinates, identity, coverage)
+    pattern: "*_sccmec_elements.csv"
   - name: svg
     type: file
-    description: SCCmec cassette structure visualization (SVG)
-    pattern: "*_sccmec.svg"
+    description: IWG-SCC color-coded SCCmec cassette diagram
+    pattern: "*_sccmec_map.svg"
   - name: html
     type: file
-    description: SCCmec cassette structure visualization (HTML)
-    pattern: "*_sccmec.html"
+    description: Interactive HTML report with diagrams and confidence scores
+    pattern: "*_sccmec_report.html"
 authors:
   - "@alarawms"

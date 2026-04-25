@@ -9,14 +9,20 @@ process SCCMEC {
     tuple val(meta), path(assembly)
 
     output:
-    tuple val(meta), path("*_sccmec.tsv"), emit: report
-    tuple val(meta), path("*_sccmec.svg"), optional: true, emit: svg
-    tuple val(meta), path("*_sccmec.html"), optional: true, emit: html
+    tuple val(meta), path("${meta.id}_sccmec.tsv")              , emit: report
+    tuple val(meta), path("${meta.id}_sccmec.json")             , emit: json
+    tuple val(meta), path("${meta.id}_sccmec_elements.csv")     , emit: elements
+    tuple val(meta), path("${meta.id}_sccmec_map.svg")          , optional: true, emit: svg
+    tuple val(meta), path("${meta.id}_sccmec_report.html")      , optional: true, emit: html
 
     script:
     def viz_flag = params.sccmec_viz ? '' : '--no-viz'
     """
-    python3 /app/bin/sccmec_typer.py --1 ${assembly} -d /app/db -o ${meta.id}_sccmec ${viz_flag} 2>/dev/null || \
-        echo -e "Sample\\tStatus\\tmecA_Present\\tSCCmec_Type\\n${meta.id}\\tND\\tND\\tND" > ${meta.id}_sccmec.tsv
+    python3 /app/bin/sccmec_typer.py \\
+        --1 ${assembly} \\
+        -d /app/db/sccmec_targets.fasta \\
+        -o ${meta.id}_sccmec \\
+        --threads ${task.cpus} \\
+        ${viz_flag}
     """
 }

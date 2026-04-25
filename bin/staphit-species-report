@@ -1,0 +1,114 @@
+#!/usr/bin/env python3
+"""staphit-species-report: collate fastANI + Mash screen into species QC reports."""
+import argparse
+import csv
+import os
+import re
+import sys
+
+
+def extract_sample_id(filename):
+    """Extract sample ID from assembly filename (e.g., ID00001.scaffolds.fasta -> ID00001)."""
+    base = os.path.basename(filename)
+    match = re.match(r'(ID\d+|[^.]+)', base)
+    return match.group(1) if match else base.rsplit('.', 1)[0]
+
+
+def parse_fastani(path):
+    """Parse fastANI output: query, reference, ANI, mapped_frags, total_frags."""
+    results = []
+    with open(path) as fh:
+        for line in fh:
+            parts = line.strip().split('\t')
+            if len(parts) >= 3:
+                results.append({
+                    'query': parts[0],
+                    'reference': parts[1],
+                    'ani': float(parts[2]),
+                    'mapped_frags': int(parts[3]) if len(parts) > 3 else 0,
+                    'total_frags': int(parts[4]) if len(parts) > 4 else 0,
+                })
+    return results
+
+
+def parse_mash_screen(path):
+    """Parse Mash screen output: identity, shared-hashes, median-multiplicity, p-value, query-ID."""
+    results = []
+    if not path or not os.path.exists(path):
+        return results
+    with open(path) as fh:
+        for line in fh:
+            parts = line.strip().split('\t')
+            if len(parts) >= 5:
+                results.append({
+                    'identity': float(parts[0]),
+                    'shared_hashes': parts[1],
+                    'median_multiplicity': int(parts[2]),
+                    'organism': parts[4] if len(parts) > 4 else parts[3],
+                    'accession': parts[5] if len(parts) > 5 else '',
+                })
+    return results
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description='Species QC report from fastANI + Mash screen')
+    parser.add_argument('--fastani', required=True, help='fastANI output TSV')
+    parser.add_argument('--mash-screen', help='Mash screen output for rejected samples (optional)')
+    parser.add_argument('--threshold', type=float, default=95.0, help='ANI threshold for species confirmation')
+    parser.add_argument('--outdir', required=True, help='Output directory')
+    args = parser.parse_args(argv)
+
+    os.makedirs(args.outdir, exist_ok=True)
+
+    ani_results = parse_fastani(args.fastani)
+
+    confirmed = []
+    excluded = []
+    for r in ani_results:
+        sample_id = extract_sample_id(r['query'])
+        entry = {
+            'sample_id': sample_id,
+            'ani_percent': f"{r['ani']:.2f}",
+            'mapped_fragments': r['mapped_frags'],
+            'total_fragments': r['total_frags'],
+            'status': 'PASS' if r['ani'] >= args.threshold else 'FAIL',
+        }
+        if r['ani'] >= args.threshold:
+            confirmed.append(entry)
+        else:
+            excluded.append(entry)
+
+    # Write confirmed (all samples with status)
+    confirmed_path = os.path.join(args.outdir, 'species_confirmed.tsv')
+    with open(confirmed_path, 'w', newline='') as fh:
+        writer = csv.DictWriter(fh, delimiter='\t',
+                                fieldnames=['sample_id', 'ani_percent', 'mapped_fragments', 'total_fragments', 'status'])
+        writer.writeheader()
+        for row in confirmed + excluded:
+            writer.writerow(row)
+
+    # Enrich excluded with Mash screen hits
+    mash_results = parse_mash_screen(args.mash_screen) if args.mash_screen else []
+    mash_by_rank = sorted(mash_results, key=lambda x: -x['identity'])
+
+    excluded_path = os.path.join(args.outdir, 'species_excluded.tsv')
+    with open(excluded_path, 'w', newline='') as fh:
+        writer = csv.DictWriter(fh, delimiter='\t',
+                                fieldnames=['sample_id', 'ani_percent', 'identified_species', 'mash_identity', 'mash_accession'])
+        writer.writeheader()
+        for i, entry in enumerate(excluded):
+            mash_hit = mash_by_rank[i] if i < len(mash_by_rank) else {}
+            writer.writerow({
+                'sample_id': entry['sample_id'],
+                'ani_percent': entry['ani_percent'],
+                'identified_species': mash_hit.get('organism', 'Unknown'),
+                'mash_identity': f"{mash_hit.get('identity', 0):.4f}" if mash_hit else '',
+                'mash_accession': mash_hit.get('accession', ''),
+            })
+
+    print(f"Species QC: {len(confirmed)} confirmed, {len(excluded)} excluded", file=sys.stderr)
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

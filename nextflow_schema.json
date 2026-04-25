@@ -310,10 +310,28 @@
                     "minimum": 0,
                     "maximum": 100
                 },
+                "assembler": {
+                    "type": "string",
+                    "default": "skesa",
+                    "description": "Assembly tool: 'skesa' (default, fast, deterministic) or 'spades' (metaSPAdes, better for complex genomes).",
+                    "enum": ["skesa", "spades"]
+                },
                 "skip_qc_gate": {
                     "type": "boolean",
                     "default": false,
                     "description": "Skip CheckM2 quality filtering."
+                },
+                "species_ani_threshold": {
+                    "type": "number",
+                    "default": 95.0,
+                    "description": "Minimum ANI (%) to NCTC 8325 for species confirmation as S. aureus.",
+                    "minimum": 80,
+                    "maximum": 100
+                },
+                "skip_species_qc": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Skip fastANI species confirmation (assume all samples are S. aureus)."
                 }
             }
         },
@@ -424,8 +442,8 @@
             "properties": {
                 "cluster_snp_tiers": {
                     "type": "string",
-                    "default": "5,15,40",
-                    "description": "SNP thresholds for direct transmission, outbreak, related (comma-separated)."
+                    "default": "15,50,200",
+                    "description": "Core gene SNP thresholds for direct transmission, outbreak, related tiers (comma-separated). Calibrated for Panaroo core gene alignment (~2M columns). For WGS reference-mapped distances use 5,15,40."
                 },
                 "cluster_cgmlst_tiers": {
                     "type": "string",

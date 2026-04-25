@@ -38,9 +38,7 @@ process INDEX_DB {
     script:
     """
     mkdir indexed_db
-    for f in ${db}/*.fsa; do
-        kma index -i "\$f" -o indexed_db/\$(basename "\$f" .fsa) 2>/dev/null || true
-    done
+    kma index -i ${db}/*.fsa -o indexed_db/resfinder
     """
 }
 
@@ -58,7 +56,7 @@ process KMA {
 
     script:
     """
-    kma -i ${reads[0]} ${reads[1]} -o ${meta.id} -t_db indexed_db/\$(ls indexed_db/*.name | head -1 | sed 's/.name//') -1t1 || true
+    kma -i ${reads[0]} ${reads[1]} -o ${meta.id} -t_db indexed_db/resfinder -1t1 || true
     touch ${meta.id}.res
     """
 }

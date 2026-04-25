@@ -257,14 +257,14 @@ class TestCLI:
         snp_path = _write_dist_matrix(tmp_path, samples, dists, 'snp.tsv')
 
         summary_rows = [
-            {'sample_id': 'S1', 'st': 'ST8', 'spa_type': 't008',
-             'location': 'ICU', 'collection_date': '2025-01-01',
+            {'sample_id': 'S1', 'mlst_st': 'ST8', 'spa_type': 't008',
+             'infection_origin': 'ICU', 'collection_date': '2025-01-01',
              'amrfinder_genes': 'mecA;blaZ'},
-            {'sample_id': 'S2', 'st': 'ST8', 'spa_type': 't008',
-             'location': 'ICU', 'collection_date': '2025-01-05',
+            {'sample_id': 'S2', 'mlst_st': 'ST8', 'spa_type': 't008',
+             'infection_origin': 'ICU', 'collection_date': '2025-01-05',
              'amrfinder_genes': 'mecA;blaZ;ermC'},
-            {'sample_id': 'S3', 'st': 'ST5', 'spa_type': 't002',
-             'location': 'ER', 'collection_date': '2025-02-01',
+            {'sample_id': 'S3', 'mlst_st': 'ST5', 'spa_type': 't002',
+             'infection_origin': 'ER', 'collection_date': '2025-02-01',
              'amrfinder_genes': 'mecA'},
         ]
         summary_path = _write_summary(tmp_path, summary_rows, 'summary.tsv')

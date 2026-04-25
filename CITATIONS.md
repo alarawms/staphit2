@@ -18,6 +18,30 @@
 
 > Ewels P, Magnusson M, Lundin S, Käller M. MultiQC: summarize analysis results for multiple tools and samples in a single report. Bioinformatics. 2016 Oct 1;32(19):3047-8. doi: 10.1093/bioinformatics/btw354. Epub 2016 Jun 16. PubMed PMID: 27312411; PubMed Central PMCID: PMC5039924.
 
+- [IQ-TREE 2](https://pubmed.ncbi.nlm.nih.gov/32011700/)
+
+> Minh BQ, Schmidt HA, Chernomor O, Schrempf D, Woodhams MD, von Haeseler A, Lanfear R. IQ-TREE 2: New Models and Efficient Methods for Phylogenetic Inference in the Genomic Era. Mol Biol Evol. 2020 May 1;37(5):1530-1534. doi: 10.1093/molbev/msaa015. PubMed PMID: 32011700; PubMed Central PMCID: PMC7182206.
+
+- [ModelFinder](https://pubmed.ncbi.nlm.nih.gov/28481363/)
+
+> Kalyaanamoorthy S, Minh BQ, Wong TKF, von Haeseler A, Jermiin LS. ModelFinder: fast model selection for accurate phylogenetic estimates. Nat Methods. 2017 Jun;14(6):587-589. doi: 10.1038/nmeth.4285. PubMed PMID: 28481363.
+
+- [UFBoot2 (ultrafast bootstrap)](https://pubmed.ncbi.nlm.nih.gov/29077904/)
+
+> Hoang DT, Chernomor O, von Haeseler A, Minh BQ, Vinh LS. UFBoot2: Improving the Ultrafast Bootstrap Approximation. Mol Biol Evol. 2018 Feb 1;35(2):518-522. doi: 10.1093/molbev/msx281. PubMed PMID: 29077904; PubMed Central PMCID: PMC5850222.
+
+- [fastANI](https://pubmed.ncbi.nlm.nih.gov/30504855/)
+
+> Jain C, Rodriguez-R LM, Phillippy AM, Konstantinidis KT, Aluru S. High throughput ANI analysis of 90K prokaryotic genomes reveals clear species boundaries. Nat Commun. 2018 Nov 30;9(1):5114. doi: 10.1038/s41467-018-07641-9. PubMed PMID: 30504855; PubMed Central PMCID: PMC6269478.
+
+- [Mash](https://pubmed.ncbi.nlm.nih.gov/27323842/)
+
+> Ondov BD, Treangen TJ, Melsted P, Mallonee AB, Bergman NH, Koren S, Phillippy AM. Mash: fast genome and metagenome distance estimation using MinHash. Genome Biol. 2016 Jun 20;17(1):132. doi: 10.1186/s13059-016-0997-x. PubMed PMID: 27323842; PubMed Central PMCID: PMC4915045.
+
+### Methods text (phylogenetic inference)
+
+Maximum-likelihood phylogenies were inferred from the Panaroo core gene alignment using IQ-TREE v2.4.0 (Minh et al., 2020). The best-fit substitution model was selected by ModelFinder (Kalyaanamoorthy et al., 2017) using the Bayesian Information Criterion. Branch support was assessed with 1000 ultrafast bootstrap replicates (UFBoot2; Hoang et al., 2018). The number of NNI search iterations was capped at 200 (`-nm 200`), which on a ~700-isolate MRSA core gene alignment captures topological convergence. The `-safe` option was used to avoid numerical underflow on long alignments.
+
 ## Software packaging/containerisation tools
 
 - [Anaconda](https://anaconda.com)

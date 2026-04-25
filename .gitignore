@@ -2,8 +2,18 @@
 work/
 data/
 results/
+results_*/
+test_results/
+.nf-test/
+.pytest_cache/
+__pycache__/
 .DS_Store
 testing/
 testing*
 *.pyc
 null/
+.git.bak/
+
+# Research output (cohort-specific, not pipeline)
+docs/manuscript/
+docs/superpowers/

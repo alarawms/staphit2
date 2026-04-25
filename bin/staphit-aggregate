@@ -94,16 +94,25 @@ def parse_metadata(json_path, sample_id):
 
 
 def parse_trimmomatic(log_path):
-    """Parse a Trimmomatic log file for read-pair survival stats."""
+    """Parse a TrimGalore (or Trimmomatic) log file for read survival stats."""
     with open(log_path, 'r') as f:
         content = f.read()
+    # Try TrimGalore format first (pipeline default)
+    raw_match = re.search(r'Total reads processed:\s+([\d,]+)', content)
+    surv_match = re.search(r'Reads written \(passing filters\):\s+([\d,]+)', content)
+    if raw_match and surv_match:
+        raw = int(raw_match.group(1).replace(',', ''))
+        surviving = int(surv_match.group(1).replace(',', ''))
+        rate = (surviving / raw * 100) if raw > 0 else 0
+        return {'raw_reads': raw, 'trimmed_reads': surviving, 'survival_rate': round(rate, 2), 'q30_rate': 0}
+    # Fall back to Trimmomatic format
     match = re.search(r'Input Read Pairs: (\d+).*Both Surviving: (\d+)', content)
-    if not match:
-        return {'raw_reads': 0, 'trimmed_reads': 0, 'survival_rate': 0, 'q30_rate': 0}
-    raw = int(match.group(1))
-    surviving = int(match.group(2))
-    rate = (surviving / raw * 100) if raw > 0 else 0
-    return {'raw_reads': raw, 'trimmed_reads': surviving, 'survival_rate': rate, 'q30_rate': 0}
+    if match:
+        raw = int(match.group(1))
+        surviving = int(match.group(2))
+        rate = (surviving / raw * 100) if raw > 0 else 0
+        return {'raw_reads': raw, 'trimmed_reads': surviving, 'survival_rate': round(rate, 2), 'q30_rate': 0}
+    return {'raw_reads': 0, 'trimmed_reads': 0, 'survival_rate': 0, 'q30_rate': 0}
 
 
 def parse_quast(quast_dir):

@@ -1,0 +1,12 @@
+name: "mash_refseq_db"
+description: Download pre-built Mash sketch of NCBI RefSeq genomes for species identification
+tools:
+  - mash:
+      description: Fast genome distance estimation using MinHash
+      homepage: https://github.com/marbl/Mash
+      licence: ["BSD"]
+output:
+  - name: db
+    type: file
+    description: RefSeq genome sketch database
+    pattern: "refseq.genomes.msh"

@@ -91,11 +91,12 @@ workflow PHYLOGENY {
 
     //
     // Select which SNP distances to use for clustering
-    // 'both' mode: Snippy distances (whole-genome, more discriminatory)
-    // 'panaroo' mode: Panaroo core gene distances
-    // 'snippy' mode: Snippy distances
+    // 'both'/'panaroo' mode: Panaroo core gene distances (preserves cross-lineage
+    //   resolution in diverse multi-ST collections; Snippy WGS core collapses when
+    //   the reference-based core narrows across divergent lineages).
+    // 'snippy' mode: Snippy WGS distances (only option when Panaroo not run).
     //
-    ch_cluster_dists = (params.phylo_method == 'both' || params.phylo_method == 'snippy')
+    ch_cluster_dists = (params.phylo_method == 'snippy')
         ? ch_snippy_dists
         : SNPDISTS_CORE.out.tsv
 

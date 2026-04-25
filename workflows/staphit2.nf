@@ -25,6 +25,7 @@ include { AMR_DETECTION    } from '../subworkflows/local/core/amr'
 include { PHYLOGENY        } from '../subworkflows/local/core/phylogeny'
 include { PLASMID_ANALYSIS } from '../subworkflows/local/core/plasmids'
 include { CLUSTERING       } from '../subworkflows/local/core/clustering'
+include { SPECIES_QC       } from '../subworkflows/local/core/species_qc'
 
 // Reporting modules (wired directly for flexible channel joining)
 include { AGGREGATOR       } from '../modules/local/aggregator'
@@ -47,9 +48,17 @@ workflow STAPHIT2 {
 
     // ── Phase 1: QC & Assembly ──────────────────────────────────────────────
     QC_ASSEMBLY ( ch_samplesheet )
-    ch_assemblies = QC_ASSEMBLY.out.passed_assemblies
     ch_trimmed    = QC_ASSEMBLY.out.trimmed_reads
     ch_versions   = ch_versions.mix(QC_ASSEMBLY.out.versions)
+
+    // ── Phase 1b: Species Confirmation ──────────────────────────────────────
+    if (!params.skip_species_qc) {
+        SPECIES_QC ( QC_ASSEMBLY.out.passed_assemblies )
+        ch_assemblies = SPECIES_QC.out.confirmed_assemblies
+        ch_versions   = ch_versions.mix(SPECIES_QC.out.versions)
+    } else {
+        ch_assemblies = QC_ASSEMBLY.out.passed_assemblies
+    }
 
     // ── Phase 2: S. aureus Typing ───────────────────────────────────────────
     SA_TYPING ( ch_assemblies )

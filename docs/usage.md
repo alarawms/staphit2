@@ -198,6 +198,9 @@ work/               # Nextflow working files
 | `--min_completeness` | `90` | Minimum CheckM2 completeness (%) to pass QC gate |
 | `--max_contamination` | `5` | Maximum CheckM2 contamination (%) to pass QC gate |
 | `--skip_qc_gate` | `false` | Skip the CheckM2 quality gate and process all samples |
+| `--species_ani_threshold` | `95.0` | Minimum ANI (%) to NCTC 8325 for *S. aureus* species confirmation |
+| `--skip_species_qc` | `false` | Skip fastANI species confirmation step |
+| `--assembler` | `skesa` | Assembly tool: `skesa` (default) or `spades` |
 
 ### Typing
 
@@ -221,7 +224,7 @@ work/               # Nextflow working files
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `--cluster_snp_tiers` | `5,15,40` | Comma-separated SNP distance thresholds defining direct transmission, outbreak, and related tiers |
+| `--cluster_snp_tiers` | `15,50,200` | Core gene SNP thresholds for direct transmission, outbreak, and related tiers (calibrated for Panaroo alignment; use `5,15,40` for WGS reference-mapped distances) |
 | `--cluster_cgmlst_tiers` | `10,24,50` | Comma-separated cgMLST allelic distance thresholds for the same three tiers |
 
 ### MultiQC

@@ -49,30 +49,36 @@ workflow QC_ASSEMBLY {
     // ch_versions = ch_versions.mix(FASTQC.out.versions.first()) // uses topic channels
 
     //
-    // MODULE: Assemble with SPAdes
+    // MODULE: Assemble with selected assembler (--assembler skesa|spades)
     //
-    SPADES (
-        ch_trimmed.map { meta, reads -> [ meta, reads, [], [] ] },
-        [],
-        []
-    )
-    ch_spades_scaffolds = SPADES.out.scaffolds
-    // ch_versions = ch_versions.mix(SPADES.out.versions.first()) // uses topic channels
+    if (params.assembler == 'spades') {
+        SPADES (
+            ch_trimmed.map { meta, reads -> [ meta, reads, [], [] ] },
+            [],
+            []
+        )
+        ch_primary_scaffolds = SPADES.out.scaffolds
+    } else {
+        SKESA ( ch_trimmed )
+        ch_primary_scaffolds = SKESA.out.scaffolds
+    }
 
-    //
-    // MODULE: Assemble with SKESA (alternative assembler)
-    //
-    SKESA ( ch_trimmed )
-    ch_skesa_scaffolds = SKESA.out.scaffolds
-
-    //
-    // Select primary assembly based on --assembler param
-    // SKESA outputs plain FASTA, SPAdes nf-core outputs .gz
     //
     // Filter out junk assemblies (S. aureus ~2.8 Mb; anything under 500 KB is junk)
-    ch_assemblies = ch_skesa_scaffolds.filter { meta, fasta ->
-        fasta.size() > 500000
+    //
+    ch_skesa_branched = ch_primary_scaffolds.branch {
+        meta, fasta ->
+            pass: fasta.size() > 500000
+            fail: true
     }
+    ch_assemblies = ch_skesa_branched.pass
+
+    // Log dropped samples (assembly too small)
+    ch_assembly_dropped = ch_skesa_branched.fail
+        .map { meta, fasta -> "${meta.id}\tassembly_too_small\t${fasta.size()}" }
+        .collect()
+        .map { lines -> lines.join('\n') }
+        .ifEmpty('')
 
     //
     // MODULE: Assembly QC with QUAST
@@ -105,17 +111,23 @@ workflow QC_ASSEMBLY {
     )
 
     //
-    // Filter assemblies to only passed samples
+    // Filter assemblies to only QC-passed samples (skip filter when --skip_qc_gate)
     //
-    ch_passed_ids = QC_GATE.out.passed
-        .splitText()
-        .map { it.trim() }
-        .filter { it }
+    if (params.skip_qc_gate) {
+        ch_passed_assemblies = ch_assemblies
+    } else {
+        ch_passed_ids = QC_GATE.out.passed
+            .splitText()
+            .map { it.trim() }
+            .filter { it }
+            .collect()
+            .map { it.toSet() }
 
-    ch_passed_assemblies = ch_assemblies
-        .filter { meta, fasta ->
-            true  // Pass all for now — QC filtering done downstream via exclude_samples
-        }
+        ch_passed_assemblies = ch_assemblies
+            .combine(ch_passed_ids)
+            .filter { meta, fasta, passed_set -> meta.id in passed_set }
+            .map { meta, fasta, passed_set -> [ meta, fasta ] }
+    }
 
     emit:
     trimmed_reads     = ch_trimmed              // channel: [ val(meta), [ path(reads) ] ]
@@ -124,11 +136,12 @@ workflow QC_ASSEMBLY {
     fastqc_html       = FASTQC.out.html         // channel: [ val(meta), path(html) ]
     assemblies        = ch_assemblies           // channel: [ val(meta), path(scaffolds) ]  — all assemblies
     passed_assemblies = ch_passed_assemblies    // channel: [ val(meta), path(scaffolds) ]  — QC-passed only
-    skesa_scaffolds   = ch_skesa_scaffolds      // channel: [ val(meta), path(scaffolds) ]
+    primary_scaffolds = ch_primary_scaffolds    // channel: [ val(meta), path(scaffolds) ]
     quast_results     = QUAST.out.results       // channel: [ val(meta), path(results) ]
     checkm2_reports   = CHECKM2.out.report      // channel: [ val(meta), path(report) ]
     qc_report         = QC_GATE.out.report      // channel: path(qc_report.tsv)
     qc_passed         = QC_GATE.out.passed      // channel: path(passed_samples.txt)
     qc_failed         = QC_GATE.out.failed      // channel: path(failed_samples.txt)
+    assembly_dropped  = ch_assembly_dropped     // channel: val(string) — TSV of samples dropped by size filter
     versions          = ch_versions             // channel: [ path(versions.yml) ]
 }

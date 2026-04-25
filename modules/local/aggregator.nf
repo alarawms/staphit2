@@ -27,6 +27,7 @@ process AGGREGATOR {
     script:
     def trim_file = trim_log instanceof List ? trim_log[0] : trim_log
     """
+    # v2: TrimGalore parser fix
     python3 ${projectDir}/bin/staphit-aggregate \
         --sample-id ${meta.id} \
         --trim-log ${trim_file} \
