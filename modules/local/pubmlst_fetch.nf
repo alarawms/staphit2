@@ -21,6 +21,7 @@ process PUBMLST_FETCH {
     def yt_arg  = params.fetch_year_to    ? "--year-to ${params.fetch_year_to}"     : ""
     def max_arg = params.fetch_max        ? "--max-downloads ${params.fetch_max}"   : ""
     """
+    export HOME=\$PWD
     pip install -q --user requests oauthlib requests-oauthlib
     python ${fetch_script} \\
         ${cc_arg} ${st_arg} ${src_arg} \\
