@@ -13,8 +13,11 @@ workflow FETCH_PUBLIC {
 
     SRA_FETCH ( ch_accessions )
 
+    ch_reads = SRA_FETCH.out.reads
+        .map { acc, reads -> [ [id: acc, single_end: false], reads ] }
+
     emit:
-    reads    = SRA_FETCH.out.reads
+    reads    = ch_reads
     metadata = PUBMLST_FETCH.out.metadata
     versions = Channel.empty()
 }

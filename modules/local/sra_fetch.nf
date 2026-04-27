@@ -7,7 +7,7 @@ process SRA_FETCH {
     val accession
 
     output:
-    tuple val([id: accession, single_end: false]), path("${accession}_{1,2}.fastq.gz"), emit: reads
+    tuple val(accession), path("${accession}_{1,2}.fastq.gz"), emit: reads
 
     script:
     """
