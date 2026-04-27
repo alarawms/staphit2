@@ -1,6 +1,7 @@
 process PUBMLST_FETCH {
     tag "${params.cc ? "CC${params.cc}" : "ST${params.st}"}"
     label 'process_single'
+    container null   // metadata-only fetch; runs on host where Python deps are installed
 
     output:
     path "accessions.txt", emit: accessions
