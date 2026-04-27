@@ -1,7 +1,7 @@
 process PUBMLST_FETCH {
     tag "${params.cc ? "CC${params.cc}" : "ST${params.st}"}"
     label 'process_single'
-    container 'docker.io/python:3.11-slim'
+    container 'docker.io/python:3.11'
 
     input:
     path fetch_script
