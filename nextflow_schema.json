@@ -11,7 +11,6 @@
             "fa_icon": "fas fa-terminal",
             "description": "Define where the pipeline should find input data and save output data.",
             "required": [
-                "input",
                 "outdir"
             ],
             "properties": {
@@ -314,7 +313,10 @@
                     "type": "string",
                     "default": "skesa",
                     "description": "Assembly tool: 'skesa' (default, fast, deterministic) or 'spades' (metaSPAdes, better for complex genomes).",
-                    "enum": ["skesa", "spades"]
+                    "enum": [
+                        "skesa",
+                        "spades"
+                    ]
                 },
                 "skip_qc_gate": {
                     "type": "boolean",
@@ -451,6 +453,66 @@
                     "description": "cgMLST allelic difference thresholds (comma-separated)."
                 }
             }
+        },
+        "public_fetch_options": {
+            "title": "Public data fetch options",
+            "type": "object",
+            "fa_icon": "fas fa-download",
+            "description": "Fetch public S. aureus genomes by ST or CC instead of providing --input.",
+            "properties": {
+                "cc": {
+                    "type": "string",
+                    "description": "Clonal complex to fetch (e.g. 97). Expands to all member STs via PubMLST.",
+                    "fa_icon": "fas fa-bacteria"
+                },
+                "st": {
+                    "type": "string",
+                    "description": "Sequence type(s) to fetch, comma-separated (e.g. 97 or 97,1153).",
+                    "fa_icon": "fas fa-bacteria"
+                },
+                "fetch_source": {
+                    "type": "string",
+                    "default": "all",
+                    "enum": [
+                        "all",
+                        "pubmlst",
+                        "ncbi",
+                        "ena"
+                    ],
+                    "description": "Metadata sources to query (default: all).",
+                    "fa_icon": "fas fa-database"
+                },
+                "fetch_country": {
+                    "type": "string",
+                    "description": "Filter isolates by country (e.g. 'Saudi Arabia').",
+                    "fa_icon": "fas fa-globe"
+                },
+                "fetch_continent": {
+                    "type": "string",
+                    "description": "Filter isolates by continent: europe, asia, africa, americas.",
+                    "fa_icon": "fas fa-globe"
+                },
+                "fetch_host": {
+                    "type": "string",
+                    "description": "Filter isolates by host species (e.g. 'Homo sapiens').",
+                    "fa_icon": "fas fa-user"
+                },
+                "fetch_year_from": {
+                    "type": "integer",
+                    "description": "Earliest isolation year to include.",
+                    "fa_icon": "fas fa-calendar"
+                },
+                "fetch_year_to": {
+                    "type": "integer",
+                    "description": "Latest isolation year to include.",
+                    "fa_icon": "fas fa-calendar"
+                },
+                "fetch_max": {
+                    "type": "integer",
+                    "description": "Cap the number of samples downloaded (useful for pilot runs).",
+                    "fa_icon": "fas fa-filter"
+                }
+            }
         }
     },
     "allOf": [
@@ -483,6 +545,9 @@
         },
         {
             "$ref": "#/$defs/clustering_options"
+        },
+        {
+            "$ref": "#/$defs/public_fetch_options"
         }
     ]
 }

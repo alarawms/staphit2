@@ -109,10 +109,67 @@ python bin/staphit-metadata convert --from-vitek-pdf vitek_pdfs/ -o antibiogram.
 # External clinical XLSX → enrich metadata
 python bin/staphit-metadata convert --from-external-xlsx clinical.xlsx \
     --metadata sample_metadata.csv -o supplement.csv
+```
 
-# SRA search → download public data
-python bin/staphit-fetch search --organism "Staphylococcus aureus" --country "Saudi Arabia" -o results.tsv
-python bin/staphit-fetch download results.tsv --output-dir fetched/
+### Fetching public genomes (pubmlst_fetch.py + nf-core/fetchngs)
+
+`bin/pubmlst_fetch.py` retrieves public *S. aureus* WGS records by ST, clonal complex, country, continent, host, or year from three sources in parallel: PubMLST BIGSdb, NCBI Entrez SRA, and ENA Portal.
+
+**Step 1 — fetch metadata and accession list**
+
+```bash
+# All CC97 isolates (expands to member STs: 97, 1153, 1154, …)
+python bin/pubmlst_fetch.py \
+    --cc 97 --source all --sra-only \
+    --out cc97_metadata.tsv \
+    --accessions cc97_accessions.txt
+
+# Specific ST only
+python bin/pubmlst_fetch.py \
+    --st 97 --source all --sra-only \
+    --out st97_metadata.tsv \
+    --accessions st97_accessions.txt
+
+# Filter by geography or host
+python bin/pubmlst_fetch.py \
+    --cc 97 --continent europe --host "Homo sapiens" --sra-only \
+    --out cc97_eu_human.tsv \
+    --accessions cc97_eu_human_accessions.txt
+```
+
+Key flags:
+
+| Flag | Description |
+|------|-------------|
+| `--cc CC` | Clonal complex — expands to all member STs via PubMLST |
+| `--st ST[,ST2,…]` | One or more exact sequence types |
+| `--source all\|pubmlst\|ncbi\|ena` | Data sources to query (default: all) |
+| `--sra-only` | Discard isolates without a public run accession |
+| `--accessions FILE` | One SRA/ENA run ID per line — input for nf-core/fetchngs |
+| `--out FILE` | Full metadata TSV with provenance fields |
+
+**Step 2 — download FASTQs with nf-core/fetchngs**
+
+[nf-core/fetchngs](https://nf-co.re/fetchngs) handles ENA and NCBI downloads reliably (tries Aspera, then FTP, then HTTPS):
+
+```bash
+nextflow run nf-core/fetchngs \
+    --input cc97_accessions.txt \
+    --outdir cc97_fetchngs \
+    --nf_core_pipeline rnaseq \
+    -profile singularity
+```
+
+This produces `cc97_fetchngs/samplesheet/samplesheet.csv` in the `sample,fastq_1,fastq_2` format expected by staphit2.
+
+**Step 3 — run staphit2**
+
+```bash
+nextflow run alarawms/staphit2 \
+    -profile singularity \
+    --input cc97_fetchngs/samplesheet/samplesheet.csv \
+    --outdir results/cc97 \
+    -resume
 ```
 
 ### Interactive dashboard
@@ -204,7 +261,7 @@ Adding a new pathogen requires only a species descriptor YAML + adapter subworkf
 | Script | Purpose |
 |--------|---------|
 | `bin/staphit-metadata` | Metadata conversion (Vitek PDF/CSV, external XLSX) |
-| `bin/staphit-fetch` | SRA/ENA search with metadata mapping |
+| `bin/pubmlst_fetch.py` | ST/CC-based public genome retrieval from PubMLST, NCBI SRA, and ENA |
 | `bin/staphit-aggregate` | Per-sample report aggregation |
 | `bin/staphit-virulence` | Structured virulence profiling (PVL, TSST, IEC, operons) |
 | `bin/staphit-mutations` | Point mutation extraction and phenotype prediction |

@@ -17,6 +17,7 @@ include { STAPHIT2  } from './workflows/staphit2'
 include { PIPELINE_INITIALISATION } from './subworkflows/local/utils_nfcore_staphit2_pipeline'
 include { PIPELINE_COMPLETION     } from './subworkflows/local/utils_nfcore_staphit2_pipeline'
 include { getGenomeAttribute      } from './subworkflows/local/utils_nfcore_staphit2_pipeline'
+include { FETCH_PUBLIC            } from './subworkflows/local/core/fetch_public'
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -63,30 +64,41 @@ workflow ALARAWMS_STAPHIT2 {
 workflow {
 
     main:
-    //
-    // SUBWORKFLOW: Run initialisation tasks
-    //
-    PIPELINE_INITIALISATION (
-        params.version,
-        params.validate_params,
-        params.monochrome_logs,
-        args,
-        params.outdir,
-        params.input,
-        params.help,
-        params.help_full,
-        params.show_hidden
-    )
 
-    //
-    // WORKFLOW: Run main workflow
-    //
-    ALARAWMS_STAPHIT2 (
-        PIPELINE_INITIALISATION.out.samplesheet
-    )
-    //
-    // SUBWORKFLOW: Run completion tasks
-    //
+    def fetch_mode = params.cc || params.st
+
+    if (fetch_mode) {
+        if (!params.cc && !params.st) {
+            error "Specify at least --cc or --st when using fetch mode"
+        }
+
+        FETCH_PUBLIC ()
+
+        ALARAWMS_STAPHIT2 (
+            FETCH_PUBLIC.out.reads
+        )
+    } else {
+        if (!params.input) {
+            error "Provide --input samplesheet.csv, or use --cc / --st to fetch public data"
+        }
+
+        PIPELINE_INITIALISATION (
+            params.version,
+            params.validate_params,
+            params.monochrome_logs,
+            args,
+            params.outdir,
+            params.input,
+            params.help,
+            params.help_full,
+            params.show_hidden
+        )
+
+        ALARAWMS_STAPHIT2 (
+            PIPELINE_INITIALISATION.out.samplesheet
+        )
+    }
+
     PIPELINE_COMPLETION (
         params.email,
         params.email_on_fail,
