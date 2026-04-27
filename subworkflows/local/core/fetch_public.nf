@@ -4,7 +4,7 @@ include { SRA_FETCH     } from '../../../modules/local/sra_fetch'
 workflow FETCH_PUBLIC {
 
     main:
-    PUBMLST_FETCH()
+    PUBMLST_FETCH(Channel.value(file("${projectDir}/bin/pubmlst_fetch.py")))
 
     ch_accessions = PUBMLST_FETCH.out.accessions
         .splitText()

@@ -1,7 +1,10 @@
 process PUBMLST_FETCH {
     tag "${params.cc ? "CC${params.cc}" : "ST${params.st}"}"
     label 'process_single'
-    container null   // metadata-only fetch; runs on host where Python deps are installed
+    container 'docker.io/python:3.11-slim'
+
+    input:
+    path fetch_script
 
     output:
     path "accessions.txt", emit: accessions
@@ -18,7 +21,8 @@ process PUBMLST_FETCH {
     def yt_arg  = params.fetch_year_to    ? "--year-to ${params.fetch_year_to}"     : ""
     def max_arg = params.fetch_max        ? "--max-downloads ${params.fetch_max}"   : ""
     """
-    python ${projectDir}/bin/pubmlst_fetch.py \\
+    pip install -q requests oauthlib requests-oauthlib
+    python ${fetch_script} \\
         ${cc_arg} ${st_arg} ${src_arg} \\
         ${ctr_arg} ${con_arg} ${hst_arg} \\
         ${yf_arg} ${yt_arg} ${max_arg} \\
