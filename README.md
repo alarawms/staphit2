@@ -99,6 +99,35 @@ nextflow run alarawms/staphit2 \
     -resume
 ```
 
+### Fetching public genomes directly via the pipeline (--cc / --st)
+
+Instead of `--input`, pass `--cc` or `--st` and the pipeline fetches public isolates automatically: `pubmlst_fetch.py` queries PubMLST + NCBI SRA + ENA for matching accessions, then `fasterq-dump` downloads and assembles the samplesheet in-flight.
+
+```bash
+# All CC97 isolates (expands ST97, ST1153, ST1154, …)
+nextflow run alarawms/staphit2 \
+    -profile docker \
+    --cc 97 \
+    --outdir results/cc97
+
+# Specific ST with geographic filter
+nextflow run alarawms/staphit2 \
+    -profile docker \
+    --st 97 \
+    --fetch_country "Saudi Arabia" \
+    --outdir results/st97_sa
+
+# Cap downloads for a pilot run
+nextflow run alarawms/staphit2 \
+    -profile docker \
+    --cc 97 \
+    --fetch_max 20 \
+    --outdir results/cc97_pilot
+```
+
+> **Note:** Run from outside the staphit2 directory, or set a dedicated `--outdir`, to avoid Nextflow config conflicts.  
+> SRA downloads require `fasterq-dump` (sra-tools container pulled automatically).
+
 ### Metadata tools
 
 Convert lab data (Vitek PDFs, clinical spreadsheets) into pipeline-ready CSVs:
@@ -187,10 +216,20 @@ Two modes: **Investigation** (linked tree + map + table) and **Analysis** (resis
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | **Input/Output** | | |
-| `--input` | | Samplesheet CSV (required) |
+| `--input` | | Samplesheet CSV (`--cc`/`--st` fetch mode bypasses this) |
 | `--outdir` | `results` | Output directory |
-| `--metadata` | | Sample metadata CSV (PHA4GE schema) |
+| `--metadata` | | Sample metadata TSV (PHA4GE schema; provides dates for BEAST2) |
 | `--antibiogram` | | Antibiogram CSV (NCBI long format) |
+| **Public data fetch (--cc / --st mode)** | | |
+| `--cc` | | Clonal complex to fetch (e.g. `97`). Expands to all member STs via PubMLST |
+| `--st` | | Sequence type(s), comma-separated (e.g. `97` or `97,1153`) |
+| `--fetch_source` | `all` | Metadata sources: `all`, `pubmlst`, `ncbi`, `ena` |
+| `--fetch_country` | | Filter by country (e.g. `Saudi Arabia`) |
+| `--fetch_continent` | | Filter by continent: `europe`, `asia`, `africa`, `americas` |
+| `--fetch_host` | | Filter by host species (e.g. `Homo sapiens`) |
+| `--fetch_year_from` | | Earliest isolation year |
+| `--fetch_year_to` | | Latest isolation year |
+| `--fetch_max` | | Cap number of downloads (useful for pilot runs) |
 | **Assembly** | | |
 | `--genome_size` | `2800000` | Expected genome size for read subsampling |
 | `--target_depth` | `100` | Target coverage for Rasusa |
@@ -311,6 +350,7 @@ Adding a new pathogen requires only a species descriptor YAML + adapter subworkf
 |--------|---------|
 | `bin/staphit-metadata` | Metadata conversion (Vitek PDF/CSV, external XLSX) |
 | `bin/pubmlst_fetch.py` | ST/CC-based public genome retrieval from PubMLST, NCBI SRA, and ENA |
+| `bin/beast2_prep.py` | Generates BEAST2 2.7 XML from core SNP alignment + metadata dates |
 | `bin/staphit-aggregate` | Per-sample report aggregation |
 | `bin/staphit-virulence` | Structured virulence profiling (PVL, TSST, IEC, operons) |
 | `bin/staphit-mutations` | Point mutation extraction and phenotype prediction |
