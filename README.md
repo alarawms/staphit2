@@ -52,6 +52,7 @@ Reads → TrimGalore → Rasusa (subsampling) → FastQC
 | Plasmid reconstruction | MOB-suite | Full plasmids with mobility and gene-to-replicon assignment |
 | Pangenome | Panaroo | Core genome alignment |
 | Phylogenetics | IQ-TREE or FastTree | Maximum-likelihood tree |
+| Bayesian phylodynamics | BEAST2 (optional) | Time-calibrated Bayesian phylogeny with strict clock and coalescent prior |
 | SNP distances | SNP-dists | Pairwise SNP distance matrix |
 | Outbreak clustering | staphit-cluster | Tiered clustering (≤5/15/40 SNPs) with epi annotation |
 | Reporting | staphit-report | Automated Markdown run report |
@@ -207,9 +208,53 @@ Two modes: **Investigation** (linked tree + map + table) and **Analysis** (resis
 | `--panaroo_threshold` | `0.95` | Core genome threshold |
 | `--snippy_mincov` | `10` | Snippy minimum read depth |
 | `--snippy_minqual` | `100` | Snippy minimum mapping quality |
+| **BEAST2 Bayesian phylodynamics** | | |
+| `--use_beast` | `false` | Enable BEAST2 time-calibrated Bayesian phylogeny (requires `--phylo_method snippy` or `both`) |
+| `--beast_chain_length` | `10000000` | MCMC chain length (steps) |
+| `--beast_log_every` | `1000` | Log frequency (sample every N steps) |
 | **Clustering** | | |
 | `--cluster_snp_tiers` | `5,15,40` | SNP thresholds: direct, outbreak, related |
 | `--cluster_cgmlst_tiers` | `10,24,50` | cgMLST thresholds |
+
+## BEAST2 Bayesian phylodynamics
+
+When `--use_beast` is passed, the pipeline runs a time-calibrated Bayesian phylogenetic analysis on the core SNP alignment produced by snippy-core. This is an optional step that runs after Phase 5 (Phylogeny) and requires `--phylo_method snippy` or `--phylo_method both`.
+
+**What it does:**
+
+- Reads `collection_date` from the metadata TSV (`--metadata`) and converts dates to decimal years for tip-date calibration
+- If no metadata is provided, or the `collection_date` column is absent, BEAST2 runs without date calibration (unrooted clock model)
+- Model: HKY + Gamma(4) site model, strict molecular clock, coalescent constant-size tree prior
+- Produces a Maximum Clade Credibility (MCC) tree annotated with posterior node ages and HPD intervals
+
+**How to enable:**
+
+```bash
+nextflow run alarawms/staphit2 \
+    -profile docker \
+    --input samplesheet.csv \
+    --outdir results \
+    --metadata metadata.tsv \
+    --use_beast \
+    --phylo_method snippy
+```
+
+**Optional tuning:**
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--beast_chain_length` | `10000000` | Total MCMC steps (increase for better convergence; check ESS > 200 in Tracer) |
+| `--beast_log_every` | `1000` | Logging interval (lower = larger files but finer posterior sampling) |
+
+**Outputs** (in `results/beast2/`):
+
+| File | Description |
+|------|-------------|
+| `beast_mcc.tree` | MCC tree with posterior node age annotations (open in FigTree or R `treeio`) |
+| `beast_run.log` | MCMC trace for convergence diagnostics (open in Tracer) |
+| `beast_run.trees` | Full posterior tree distribution (10 % burn-in applied by TreeAnnotator) |
+
+> **Note:** BEAST2 is computationally intensive. For large collections (>200 samples) consider reducing `--beast_chain_length` for a pilot run and checking ESS values in Tracer before a production run.
 
 ## Output
 
@@ -235,6 +280,10 @@ results/
 ├── prokka/             # Genome annotations
 ├── panaroo/            # Pangenome analysis
 ├── iqtree/             # Phylogenetic tree
+├── beast2/             # Bayesian phylogeny (only if --use_beast)
+│   ├── beast_mcc.tree  # Maximum clade credibility annotated tree
+│   ├── beast_run.log   # BEAST2 MCMC trace (ESS diagnostics in Tracer)
+│   └── beast_run.trees # Posterior tree distribution (input for TreeAnnotator)
 ├── snpdists/           # SNP distance matrix
 ├── aggregated/         # Per-sample JSON reports + summary
 ├── clusters/           # Outbreak clusters + transmission pairs

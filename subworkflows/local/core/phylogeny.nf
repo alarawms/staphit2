@@ -17,6 +17,7 @@ include { FASTTREE           } from '../../../modules/local/fasttree'
 include { IQTREE             } from '../../../modules/nf-core/iqtree/main'
 include { SNPDISTS as SNPDISTS_CORE   } from '../../../modules/nf-core/snpdists/main'
 include { SNPDISTS as SNPDISTS_SNIPPY } from '../../../modules/nf-core/snpdists/main'
+include { BEAST2                      } from '../../../modules/local/beast2'
 
 workflow PHYLOGENY {
 
@@ -26,8 +27,9 @@ workflow PHYLOGENY {
 
     main:
 
-    ch_versions = Channel.empty()
+    ch_versions   = Channel.empty()
     ch_snippy_dists = Channel.empty()
+    ch_beast2_tree  = Channel.empty()
 
     //
     // MODULE: Annotate assemblies with Prokka (needed for Panaroo)
@@ -73,6 +75,19 @@ workflow PHYLOGENY {
         SNPDISTS_SNIPPY ( SNIPPY_CORE.out.aln.map { aln -> [ [id: 'snippy_wgs'], aln ] } )
         ch_snippy_dists = SNPDISTS_SNIPPY.out.tsv
 
+        // Optional Bayesian phylodynamics (--use_beast)
+        if (params.use_beast) {
+            ch_metadata = params.metadata
+                ? Channel.fromPath(params.metadata, checkIfExists: true)
+                : Channel.fromPath("${projectDir}/assets/NO_METADATA")
+            BEAST2(
+                SNIPPY_CORE.out.aln,
+                ch_metadata,
+                Channel.value(file("${projectDir}/bin/beast2_prep.py"))
+            )
+            ch_beast2_tree = BEAST2.out.mcc_tree
+        }
+
         // If snippy-only mode, also build tree from snippy alignment
         if (params.phylo_method == 'snippy') {
             if (params.tree_builder == 'iqtree') {
@@ -105,5 +120,6 @@ workflow PHYLOGENY {
     tree          = ch_tree               // [ val(meta), path(treefile) ]
     snp_dists     = SNPDISTS_CORE.out.tsv // [ val(meta), path(tsv) ] — for tree visualization
     cluster_dists = ch_cluster_dists      // [ val(meta), path(tsv) ] — for outbreak clustering
+    beast2_tree   = ch_beast2_tree        // path(beast_mcc.tree) — MCC annotated tree (empty if --use_beast not set)
     versions      = ch_versions
 }

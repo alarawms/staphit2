@@ -454,6 +454,34 @@
                 }
             }
         },
+        "beast2_options": {
+            "title": "BEAST2 Bayesian phylodynamics options",
+            "type": "object",
+            "fa_icon": "fas fa-clock",
+            "description": "Optional Bayesian time-calibrated phylogenetics with BEAST2 (activate with --use_beast).",
+            "properties": {
+                "use_beast": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Run BEAST2 Bayesian phylodynamics on the core SNP alignment from snippy-core.",
+                    "fa_icon": "fas fa-toggle-on"
+                },
+                "beast_chain_length": {
+                    "type": "integer",
+                    "default": 10000000,
+                    "description": "MCMC chain length for BEAST2 (number of steps).",
+                    "minimum": 100000,
+                    "fa_icon": "fas fa-link"
+                },
+                "beast_log_every": {
+                    "type": "integer",
+                    "default": 1000,
+                    "description": "BEAST2 log frequency (sample every N steps).",
+                    "minimum": 100,
+                    "fa_icon": "fas fa-save"
+                }
+            }
+        },
         "public_fetch_options": {
             "title": "Public data fetch options",
             "type": "object",
@@ -545,6 +573,9 @@
         },
         {
             "$ref": "#/$defs/clustering_options"
+        },
+        {
+            "$ref": "#/$defs/beast2_options"
         },
         {
             "$ref": "#/$defs/public_fetch_options"
