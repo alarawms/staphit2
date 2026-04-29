@@ -221,7 +221,7 @@ Two modes: **Investigation** (linked tree + map + table) and **Analysis** (resis
 sudo dnf install -y \
     cairo-devel fontconfig-devel freetype-devel \
     harfbuzz-devel fribidi-devel libpng-devel \
-    libcurl-devel libxml2-devel pandoc
+    libcurl-devel libxml2-devel libuv-devel pandoc
 ```
 
 On Ubuntu/Debian:
@@ -230,7 +230,7 @@ On Ubuntu/Debian:
 sudo apt-get install -y \
     libcairo2-dev libfontconfig1-dev libfreetype-dev \
     libharfbuzz-dev libfribidi-dev libpng-dev \
-    libcurl4-openssl-dev libxml2-dev pandoc
+    libcurl4-openssl-dev libxml2-dev libuv1-dev pandoc
 ```
 
 R packages are installed automatically to `~/.R/library` on first run.
