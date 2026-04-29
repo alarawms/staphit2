@@ -125,6 +125,17 @@ nextflow run alarawms/staphit2 \
     --outdir results/cc97_pilot
 ```
 
+```bash
+# Combined — fetch public CC97 AND run local isolates in the same pipeline pass
+nextflow run alarawms/staphit2 \
+    -profile docker \
+    --cc 97 \
+    --input local_cc97_samplesheet.csv \
+    --outdir results/cc97_combined
+```
+
+Both sources are mixed into a single channel before assembly — `--resume` will reuse cached work for any sample IDs already processed.
+
 > **Note:** Run from outside the staphit2 directory, or set a dedicated `--outdir`, to avoid Nextflow config conflicts.  
 > SRA downloads require `fasterq-dump` (sra-tools container pulled automatically).
 
@@ -211,6 +222,19 @@ python bin/staphit-dashboard results/ --host 0.0.0.0 --port 8050
 
 Two modes: **Investigation** (linked tree + map + table) and **Analysis** (resistance, trends, virulence, clusters, plasmids, QC tabs).
 
+### Microreact export
+
+`bin/export_microreact.py` bundles the core SNP tree, sample metadata, and cluster assignments into a single self-contained `.microreact` file that can be dragged into [microreact.org](https://microreact.org) for interactive visualisation — no data is uploaded; the viewer runs entirely in the browser.
+
+```bash
+python bin/export_microreact.py results/cc97 cc97 cc97_metadata.tsv
+# → cc97.microreact  (drag into microreact.org or a self-hosted instance)
+```
+
+Arguments: `<results_subdir>  [run_name]  [pubmlst_metadata.tsv]`
+
+The metadata TSV is optional; if omitted the script looks for `<run_name>_metadata.tsv` next to the results directory. Fields exported: Country, Continent, Year, Source, Host, ST, spa type, SCCmec, agr group, PVL, TSST, mecA, outbreak cluster, AMR genes.
+
 ### Annotated phylogenetic tree (local)
 
 `bin/plot_tree.R` reads pipeline outputs directly and produces a PDF and SVG with six annotation strips (SCCmec, agr group, PVL, TSST, mecA, outbreak cluster) and tip points coloured by spa type.
@@ -250,7 +274,7 @@ Failures are non-fatal: the script exits 0 and writes a `PLOT_TREE_FAILED` file 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | **Input/Output** | | |
-| `--input` | | Samplesheet CSV (`--cc`/`--st` fetch mode bypasses this) |
+| `--input` | | Samplesheet CSV. Can be combined with `--cc`/`--st` to mix local and fetched samples |
 | `--outdir` | `results` | Output directory |
 | `--metadata` | | Sample metadata TSV (PHA4GE schema; provides dates for BEAST2) |
 | `--antibiogram` | | Antibiogram CSV (NCBI long format) |
@@ -273,6 +297,8 @@ Failures are non-fatal: the script exits 0 and writes a `PLOT_TREE_FAILED` file 
 | `--skip_qc_gate` | `false` | Skip CheckM2 quality filtering |
 | **Typing** | | |
 | `--sccmec_viz` | `false` | Generate SCCmec SVG/HTML element maps |
+| `--sccmec_best_fit` | `true` | Use best-fit SCCmec assignment to resolve ambiguous/composite cassettes |
+| `--sccmec_min_score` | `0.6` | Minimum estimate score for best-fit assignment (lower = more permissive) |
 | **Phylogenetics** | | |
 | `--phylo_method` | `panaroo` | `panaroo` (pangenome) or `snippy` (reference-based) |
 | `--tree_builder` | `iqtree` | `iqtree` or `fasttree` |

@@ -66,22 +66,20 @@ workflow {
     main:
 
     def fetch_mode = params.cc || params.st
+    def input_mode = params.input as Boolean
+
+    if (!fetch_mode && !input_mode) {
+        error "Provide --input samplesheet.csv, or use --cc / --st to fetch public data"
+    }
+
+    ch_reads = Channel.empty()
 
     if (fetch_mode) {
-        if (!params.cc && !params.st) {
-            error "Specify at least --cc or --st when using fetch mode"
-        }
-
         FETCH_PUBLIC ()
+        ch_reads = ch_reads.mix(FETCH_PUBLIC.out.reads)
+    }
 
-        ALARAWMS_STAPHIT2 (
-            FETCH_PUBLIC.out.reads
-        )
-    } else {
-        if (!params.input) {
-            error "Provide --input samplesheet.csv, or use --cc / --st to fetch public data"
-        }
-
+    if (input_mode) {
         PIPELINE_INITIALISATION (
             params.version,
             params.validate_params,
@@ -93,11 +91,10 @@ workflow {
             params.help_full,
             params.show_hidden
         )
-
-        ALARAWMS_STAPHIT2 (
-            PIPELINE_INITIALISATION.out.samplesheet
-        )
+        ch_reads = ch_reads.mix(PIPELINE_INITIALISATION.out.samplesheet)
     }
+
+    ALARAWMS_STAPHIT2 ( ch_reads )
 
     PIPELINE_COMPLETION (
         params.email,
