@@ -126,17 +126,27 @@ pvl_colors  <- c("PVL+"  = "#d73027", "PVL-"  = "#f5f5f5")
 tsst_colors <- c("TSST+" = "#4575b4", "TSST-" = "#f5f5f5")
 meca_colors <- c("mecA+" = "#b2182b", "mecA-" = "#f5f5f5")
 
-n_ob <- length(multi_ob)
+# Only keep top 12 outbreak clusters by size to avoid legend explosion
+ob_top12 <- meta |>
+  filter(!is.na(outbreak_cluster)) |>
+  count(outbreak_cluster, sort = TRUE) |>
+  filter(n > 1) |>
+  slice_head(n = 12) |>
+  pull(outbreak_cluster)
+
+meta <- meta |>
+  mutate(ob_strip = if_else(outbreak_cluster %in% ob_top12, outbreak_cluster, NA_character_))
+
+n_ob <- length(ob_top12)
 ob_colors <- if (n_ob == 0) {
   character(0)
 } else {
-  pal <- if (n_ob <= 12) brewer.pal(max(3, n_ob), "Paired") else
-    colorRampPalette(brewer.pal(12, "Paired"))(n_ob)
-  setNames(pal[seq_len(n_ob)], sort(multi_ob))
+  pal <- brewer.pal(max(3, min(n_ob, 12)), "Paired")
+  setNames(pal[seq_len(n_ob)], sort(ob_top12))
 }
 
-# ── Helper: add one annotation strip ─────────────────────────────────────────
-add_strip <- function(p, col, fill_scale, offset = 0.008, pwidth = 0.04) {
+# ── Helper: add one annotation ring (circular layout) ────────────────────────
+add_ring <- function(p, col, fill_scale, offset = 0.05, pwidth = 0.1) {
   df <- meta |> select(sample_id, strip_val = all_of(col))
   p + new_scale_fill() +
     geom_fruit(
@@ -150,45 +160,45 @@ add_strip <- function(p, col, fill_scale, offset = 0.008, pwidth = 0.04) {
     fill_scale
 }
 
-# ── Build tree ────────────────────────────────────────────────────────────────
-p <- ggtree(tree, layout = "rectangular", linewidth = 0.15, color = "grey35") %<+% meta +
-  geom_tippoint(aes(color = spa_group), size = 0.55, alpha = 0.85) +
+# ── Build circular tree ───────────────────────────────────────────────────────
+p <- ggtree(tree, layout = "circular", linewidth = 0.15, color = "grey40") %<+% meta +
+  geom_tippoint(aes(color = spa_group), size = 0.6, alpha = 0.9) +
   scale_color_manual(values = spa_colors, name = "spa type", na.value = "grey80") +
-  theme_tree2() +
+  theme_tree() +
   theme(
     legend.position  = "right",
-    legend.key.size  = unit(0.32, "cm"),
+    legend.key.size  = unit(0.3, "cm"),
     legend.text      = element_text(size = 6.5),
     legend.title     = element_text(size = 7.5, face = "bold"),
     legend.spacing.y = unit(0.1, "cm"),
-    plot.title       = element_text(size = 9, face = "bold"),
-    plot.caption     = element_text(size = 5.5, color = "grey55"),
-    plot.margin      = margin(6, 6, 6, 6)
+    plot.title       = element_text(size = 10, face = "bold", hjust = 0.5),
+    plot.caption     = element_text(size = 6, color = "grey55", hjust = 0.5),
+    plot.margin      = margin(10, 10, 10, 10)
   ) +
   labs(
-    title   = sprintf("%s — Core SNP phylogeny  (%d isolates)", run_name, Ntip(tree)),
-    caption = "Strips (L→R): SCCmec · agr group · PVL · TSST · mecA · Outbreak cluster"
+    title   = sprintf("%s - Core SNP phylogeny (%d isolates)", run_name, Ntip(tree)),
+    caption = "Rings (inner->outer): SCCmec | agr group | PVL | TSST | mecA | Top-12 outbreak clusters"
   )
 
-p <- add_strip(p, "sccmec",
+p <- add_ring(p, "sccmec",
   scale_fill_manual(values = sccmec_colors, name = "SCCmec",    na.value = "#eeeeee"))
-p <- add_strip(p, "agr_group",
+p <- add_ring(p, "agr_group",
   scale_fill_manual(values = agr_colors,    name = "agr group", na.value = "grey90"))
-p <- add_strip(p, "pvl",
+p <- add_ring(p, "pvl",
   scale_fill_manual(values = pvl_colors,    name = "PVL",       na.value = "grey90"))
-p <- add_strip(p, "tsst",
+p <- add_ring(p, "tsst",
   scale_fill_manual(values = tsst_colors,   name = "TSST",      na.value = "grey90"))
-p <- add_strip(p, "meca",
+p <- add_ring(p, "meca",
   scale_fill_manual(values = meca_colors,   name = "mecA",      na.value = "grey90"))
 
 if (n_ob > 0) {
-  p <- add_strip(p, "ob_strip",
-    scale_fill_manual(values = ob_colors, name = "Outbreak cluster", na.value = "grey97"))
+  p <- add_ring(p, "ob_strip",
+    scale_fill_manual(values = ob_colors, name = "Outbreak\ncluster", na.value = "grey97"))
 }
 
 # ── Save ──────────────────────────────────────────────────────────────────────
 width  <- 14
-height <- max(10, Ntip(tree) / 28)
+height <- 14
 
 out_pdf <- paste0(run_name, "_tree.pdf")
 out_svg <- paste0(run_name, "_tree.svg")

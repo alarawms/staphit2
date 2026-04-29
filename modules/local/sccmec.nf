@@ -16,13 +16,14 @@ process SCCMEC {
     tuple val(meta), path("${meta.id}_sccmec_report.html")      , optional: true, emit: html
 
     script:
-    def viz_flag = params.sccmec_viz ? '' : '--no-viz'
+    def viz_flag      = params.sccmec_viz      ? ''                                                   : '--no-viz'
+    def bestfit_flag  = params.sccmec_best_fit ? "--best-fit --min-estimate-score ${params.sccmec_min_score}" : ''
     """
     python3 /app/bin/sccmec_typer.py \\
         --1 ${assembly} \\
         -d /app/db/sccmec_targets.fasta \\
         -o ${meta.id}_sccmec \\
         --threads ${task.cpus} \\
-        ${viz_flag}
+        ${viz_flag} ${bestfit_flag}
     """
 }

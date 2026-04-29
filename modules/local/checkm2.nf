@@ -13,8 +13,7 @@ process CHECKM2 {
     script:
     """
     mkdir -p input_dir
-    # Handle both gzipped and plain FASTA
-    if file ${assembly} | grep -q gzip; then
+    if [[ "${assembly}" == *.gz ]]; then
         zcat ${assembly} > input_dir/${meta.id}.fasta
     else
         cp ${assembly} input_dir/${meta.id}.fasta
