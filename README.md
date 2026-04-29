@@ -211,6 +211,40 @@ python bin/staphit-dashboard results/ --host 0.0.0.0 --port 8050
 
 Two modes: **Investigation** (linked tree + map + table) and **Analysis** (resistance, trends, virulence, clusters, plasmids, QC tabs).
 
+### Annotated phylogenetic tree (local)
+
+`bin/plot_tree.R` reads pipeline outputs directly and produces a PDF and SVG with six annotation strips (SCCmec, agr group, PVL, TSST, mecA, outbreak cluster) and tip points coloured by spa type.
+
+#### System requirements (one-time, Fedora/RHEL)
+
+```bash
+sudo dnf install -y \
+    cairo-devel fontconfig-devel freetype-devel \
+    harfbuzz-devel fribidi-devel libpng-devel \
+    libcurl-devel libxml2-devel pandoc
+```
+
+On Ubuntu/Debian:
+
+```bash
+sudo apt-get install -y \
+    libcairo2-dev libfontconfig1-dev libfreetype-dev \
+    libharfbuzz-dev libfribidi-dev libpng-dev \
+    libcurl4-openssl-dev libxml2-dev pandoc
+```
+
+R packages are installed automatically to `~/.R/library` on first run.
+
+#### Usage
+
+```bash
+Rscript bin/plot_tree.R results/cc97 cc97
+# → cc97_tree.pdf  (14 × ~26 in, scales with isolate count)
+# → cc97_tree.svg  (same dimensions, text as SVG elements — editable in Inkscape)
+```
+
+Failures are non-fatal: the script exits 0 and writes a `PLOT_TREE_FAILED` file so a wrapping Nextflow process is never blocked.
+
 ## Parameters
 
 | Parameter | Default | Description |
@@ -351,6 +385,7 @@ Adding a new pathogen requires only a species descriptor YAML + adapter subworkf
 | `bin/staphit-metadata` | Metadata conversion (Vitek PDF/CSV, external XLSX) |
 | `bin/pubmlst_fetch.py` | ST/CC-based public genome retrieval from PubMLST, NCBI SRA, and ENA |
 | `bin/beast2_prep.py` | Generates BEAST2 2.7 XML from core SNP alignment + metadata dates |
+| `bin/plot_tree.R` | Annotated phylogenetic tree (PDF + SVG) from pipeline outputs |
 | `bin/staphit-aggregate` | Per-sample report aggregation |
 | `bin/staphit-virulence` | Structured virulence profiling (PVL, TSST, IEC, operons) |
 | `bin/staphit-mutations` | Point mutation extraction and phenotype prediction |

@@ -32,6 +32,7 @@ include { AGGREGATOR       } from '../modules/local/aggregator'
 include { SUMMARY_MERGER   } from '../modules/local/summary_merger'
 include { REPORT           } from '../modules/local/report'
 include { VISUALIZATION    } from '../modules/local/visualization'
+include { PLOT_TREE        } from '../modules/local/plot_tree'
 
 // MultiQC
 include { MULTIQC          } from '../modules/nf-core/multiqc/main'
@@ -100,7 +101,7 @@ workflow STAPHIT2 {
     // Broadcast metadata JSON to all samples (or placeholder if not provided)
     ch_metadata = params.metadata
         ? Channel.fromPath(params.metadata, checkIfExists: true)
-        : Channel.of(file('NO_METADATA'))
+        : Channel.of(file("${projectDir}/assets/NO_METADATA"))
 
     ch_agg_final = ch_agg_in.combine(ch_metadata)
 
@@ -112,7 +113,7 @@ workflow STAPHIT2 {
     )
 
     // ── Phase 7: Outbreak Clustering ────────────────────────────────────────
-    ch_cgmlst_dists = Channel.of(file('NO_CGMLST_DISTS'))
+    ch_cgmlst_dists = Channel.of(file("${projectDir}/assets/NO_CGMLST_DISTS"))
 
     // Use Snippy whole-genome distances for clustering (more discriminatory)
     // Falls back to Panaroo core gene distances if Snippy not run
@@ -134,6 +135,14 @@ workflow STAPHIT2 {
         SUMMARY_MERGER.out.summary,
         CLUSTERING.out.clusters
     )
+
+    if (params.plot_tree) {
+        PLOT_TREE (
+            PHYLOGENY.out.tree.map { _meta, tree -> tree }.first(),
+            SUMMARY_MERGER.out.summary,
+            CLUSTERING.out.clusters
+        )
+    }
 
     // ── MultiQC ─────────────────────────────────────────────────────────────
     ch_multiqc_files = ch_multiqc_files.mix(
