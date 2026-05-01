@@ -235,6 +235,32 @@ Arguments: `<results_subdir>  [run_name]  [pubmlst_metadata.tsv]`
 
 The metadata TSV is optional; if omitted the script looks for `<run_name>_metadata.tsv` next to the results directory. Fields exported: Country, Continent, Year, Source, Host, ST, spa type, SCCmec, agr group, PVL, TSST, mecA, outbreak cluster, AMR genes.
 
+### iTOL annotation export
+
+`bin/export_itol.py` generates 10 numbered annotation files ready to drag into [iTOL](https://itol.embl.de) after uploading your tree:
+
+| File | Track | Type |
+|------|-------|------|
+| `01_country_symbols.txt` | Country | Symbol (circle, per-country colour) |
+| `02_year_labels.txt` | Year | Text label |
+| `03_st_labels.txt` | MLST ST | Text label |
+| `04_spa_labels.txt` | spa type | Text label |
+| `05_sccmec_strip.txt` | SCCmec | Colour strip + label |
+| `06_agr_strip.txt` | agr group | Colour strip + label |
+| `07_virulence_binary.txt` | PVL / TSST / mecA | Binary (3 columns) |
+| `08_amr_count_bar.txt` | AMR gene count | Simple bar |
+| `09_amr_top5_binary.txt` | Top 5 AMR genes | Binary (auto-detected) |
+| `10_outbreak_strip.txt` | Outbreak cluster | Colour strip + label |
+
+```bash
+python bin/export_itol.py results/cc97 cc97 cc97_metadata.tsv
+# → itol/cc97/  (10 annotation files)
+```
+
+Arguments: `<results_subdir>  [run_name]  [pubmlst_metadata.tsv]`
+
+The metadata TSV is optional; country and year are inferred from `<run_name>_metadata.tsv` if not supplied. The top 5 AMR genes in track 09 are determined automatically by prevalence across the dataset.
+
 ### Annotated phylogenetic tree (local)
 
 `bin/plot_tree.R` reads pipeline outputs directly and produces a PDF and SVG with six annotation strips (SCCmec, agr group, PVL, TSST, mecA, outbreak cluster) and tip points coloured by spa type.
