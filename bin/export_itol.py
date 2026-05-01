@@ -3,7 +3,7 @@
 Generate iTOL-compatible annotation files from staphit2 pipeline outputs.
 
 Usage:
-    python bin/export_itol.py <results_subdir> [run_name] [pubmlst_metadata.tsv]
+    python bin/export_itol.py <results_subdir> [run_name] [pubmlst_metadata.tsv] [local_metadata.csv]
 
 Output:
     itol/<run_name>/  — numbered .txt files, drag all into the iTOL annotation panel
@@ -13,11 +13,12 @@ from pathlib import Path
 from collections import Counter
 
 if len(sys.argv) < 2:
-    sys.exit("Usage: export_itol.py <results_subdir> [run_name] [metadata.tsv]")
+    sys.exit("Usage: export_itol.py <results_subdir> [run_name] [pubmlst_metadata.tsv] [local_metadata.csv]")
 
-outdir    = Path(sys.argv[1])
-run_name  = sys.argv[2] if len(sys.argv) > 2 else outdir.name
-meta_path = Path(sys.argv[3]) if len(sys.argv) > 3 else None
+outdir      = Path(sys.argv[1])
+run_name    = sys.argv[2] if len(sys.argv) > 2 else outdir.name
+meta_path   = Path(sys.argv[3]) if len(sys.argv) > 3 else None
+local_meta_path = Path(sys.argv[4]) if len(sys.argv) > 4 else None
 
 summary_file = outdir / "summary" / "combined_summary.tsv"
 cluster_file = outdir / "clusters" / "clusters.tsv"
@@ -94,6 +95,80 @@ if not pub_meta:
                     pub_meta[acc] = r
             if pub_meta:
                 break
+
+# Local sample metadata (CSV — sample_id, collected_by, host_body_site, geo_loc_region, host …)
+local_meta = {}
+if local_meta_path and local_meta_path.exists():
+    with open(local_meta_path) as fh:
+        for r in csv.DictReader(fh):
+            sid = r.get("sample_id", "").strip()
+            if sid:
+                local_meta[sid] = r
+else:
+    # auto-discover next to the Staphit dir
+    for candidate in [
+        Path("/home/alarawms/hd2/MRSA/Staphit/sample_metadata.csv"),
+        outdir.parent / "sample_metadata.csv",
+        Path("sample_metadata.csv"),
+    ]:
+        if candidate.exists():
+            with open(candidate) as fh:
+                for r in csv.DictReader(fh):
+                    sid = r.get("sample_id", "").strip()
+                    if sid:
+                        local_meta[sid] = r
+            if local_meta:
+                print(f"Local metadata loaded from: {candidate}  ({len(local_meta)} samples)")
+                break
+
+# ── Source normalisation map (body site / specimen type) ──────────────────────
+SOURCE_NORM = {
+    # blood
+    "blood": "blood", "blood cultuer": "blood", "blood culture": "blood",
+    # nasal / respiratory
+    "nasal": "nasal/respiratory", "nose": "nasal/respiratory", "nsal": "nasal/respiratory",
+    "respiratory": "nasal/respiratory", "respiratory cultuer": "nasal/respiratory",
+    "tracheal aspirate": "nasal/respiratory", "endotracheal aspirate": "nasal/respiratory",
+    "sputum": "nasal/respiratory",
+    # wound
+    "wound": "wound", "wound culture": "wound", "abscess wound out": "wound",
+    "absscess": "wound", "abscess": "wound", "abscess/wound": "wound",
+    # urine
+    "urine": "urine", "urine culture": "urine", "urine cultuer": "urine",
+    # ear
+    "ear": "ear/eye/nose", "ear caltuer": "ear/eye/nose",
+    "ear culture": "ear/eye/nose", "eye": "ear/eye/nose",
+    # fluid / CSF
+    "fluid": "fluid/CSF", "c fliud": "fluid/CSF", "csf": "fluid/CSF",
+    # skin / soft tissue
+    "skin": "skin", "swab skin": "skin", "groin": "skin",
+    "buttock": "skin", "finger": "skin", "left foot": "skin",
+    "left hip": "skin", "swab toe 1st rt": "skin",
+    # milk / bovine
+    "milk": "milk/bovine", "bulk tank milk": "milk/bovine",
+    "isolated from milk sample taken from dairy farm bulk milk tank": "milk/bovine",
+    # other / environmental
+    "food": "food/environmental", "clinical": "clinical (unspecified)",
+    "missing": "", "not collected": "", "n/a": "",
+}
+
+def norm_source(raw):
+    if not raw:
+        return ""
+    return SOURCE_NORM.get(raw.strip().lower(), raw.strip())
+
+# ── Host normalisation ────────────────────────────────────────────────────────
+def norm_host(raw):
+    if not raw:
+        return ""
+    r = raw.strip().lower()
+    if r in ("homo sapiens", "homo_sapiens", "human"):
+        return "Human"
+    if r in ("bos taurus", "cattle", "bovine", "cow"):
+        return "Bovine"
+    if r in ("not applicable", "n/a", ""):
+        return ""
+    return raw.strip().title()
 
 # ── Output directory ───────────────────────────────────────────────────────────
 itol_dir = Path("itol") / run_name
@@ -307,6 +382,82 @@ write_file("10_outbreak_strip.txt", [
     "DATA",
     "#node_id\tcolor\tlabel",
     *ob_data,
+])
+
+# ── 11. Host — DATASET_COLORSTRIP ─────────────────────────────────────────────
+HOST_COLORS  = {"Human": "#4393c3", "Bovine": "#d6604d"}
+HOST_DEFAULT = "#cccccc"
+
+host_vals = []
+for sid in ids:
+    lm  = local_meta.get(sid, {})
+    pm  = pub_meta.get(sid, {})
+    raw = lm.get("host", "") or pm.get("host", "")
+    host_vals.append(norm_host(raw))
+
+unique_hosts = [h for h in ["Human", "Bovine"] if h in host_vals]
+extra_hosts  = sorted(set(h for h in host_vals if h and h not in unique_hosts))
+all_hosts    = unique_hosts + extra_hosts
+host_color_map = {**HOST_COLORS, **dict(zip(extra_hosts, palette(len(extra_hosts))))}
+
+write_file("11_host_strip.txt", [
+    header("DATASET_COLORSTRIP", "Host", "#333333",
+        "COLOR_BRANCHES\t0\nSHOW_LABELS\t1\nLABEL_SIZE\t0.8\n"
+        "LEGEND_TITLE\tHost\n"
+        "LEGEND_SHAPES\t" + "\t".join(["1"] * len(all_hosts)) + "\n"
+        "LEGEND_COLORS\t" + "\t".join(host_color_map.get(h, HOST_DEFAULT) for h in all_hosts) + "\n"
+        "LEGEND_LABELS\t" + "\t".join(all_hosts)),
+    "DATA",
+    "#node_id\tcolor\tlabel",
+    *[f"{sid}\t{host_color_map.get(v, HOST_DEFAULT)}\t{v}"
+      for sid, v in zip(ids, host_vals) if v],
+])
+
+# ── 12. Source (specimen/body site) — DATASET_COLORSTRIP ──────────────────────
+source_vals = []
+for sid in ids:
+    lm  = local_meta.get(sid, {})
+    pm  = pub_meta.get(sid, {})
+    raw = lm.get("host_body_site", "") or pm.get("source_category", "")
+    source_vals.append(norm_source(raw))
+
+unique_sources = sorted(set(v for v in source_vals if v))
+src_colors     = dict(zip(unique_sources, palette(len(unique_sources))))
+
+write_file("12_source_strip.txt", [
+    header("DATASET_COLORSTRIP", "Source", "#333333",
+        "COLOR_BRANCHES\t0\nSHOW_LABELS\t1\nLABEL_SIZE\t0.8\n"
+        "LEGEND_TITLE\tSpecimen source\n"
+        "LEGEND_SHAPES\t" + "\t".join(["1"] * len(unique_sources)) + "\n"
+        "LEGEND_COLORS\t" + "\t".join(src_colors[v] for v in unique_sources) + "\n"
+        "LEGEND_LABELS\t" + "\t".join(unique_sources)),
+    "DATA",
+    "#node_id\tcolor\tlabel",
+    *[f"{sid}\t{src_colors[v]}\t{v}"
+      for sid, v in zip(ids, source_vals) if v],
+])
+
+# ── 13. Hospital / Institution — DATASET_COLORSTRIP (local samples only) ──────
+hosp_vals = {}
+for sid in ids:
+    lm = local_meta.get(sid, {})
+    h  = lm.get("collected_by", "").strip()
+    if h:
+        hosp_vals[sid] = h
+
+unique_hosps = sorted(set(hosp_vals.values()))
+hosp_colors  = dict(zip(unique_hosps, palette(len(unique_hosps))))
+
+write_file("13_hospital_strip.txt", [
+    header("DATASET_COLORSTRIP", "Hospital", "#333333",
+        "COLOR_BRANCHES\t0\nSHOW_LABELS\t1\nLABEL_SIZE\t0.8\n"
+        "LEGEND_TITLE\tHospital / Institution\n"
+        "LEGEND_SHAPES\t" + "\t".join(["1"] * len(unique_hosps)) + "\n"
+        "LEGEND_COLORS\t" + "\t".join(hosp_colors[h] for h in unique_hosps) + "\n"
+        "LEGEND_LABELS\t" + "\t".join(unique_hosps)),
+    "DATA",
+    "#node_id\tcolor\tlabel",
+    *[f"{sid}\t{hosp_colors[h]}\t{h}" for sid, h in hosp_vals.items()],
 ])
 
 # ── Summary ────────────────────────────────────────────────────────────────────
