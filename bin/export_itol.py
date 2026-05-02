@@ -43,7 +43,7 @@ def palette(n, colors=None):
     return [base[i % len(base)] for i in range(n)]
 
 def header(dtype, label, color="#333333", extra_lines=""):
-    lines = [dtype, "SEPARATOR\tTAB", f"DATASET_LABEL\t{label}", f"COLOR\t{color}"]
+    lines = [dtype, "SEPARATOR TAB", f"DATASET_LABEL\t{label}", f"COLOR\t{color}"]
     if extra_lines:
         lines.append(extra_lines.rstrip())
     return "\n".join(lines)
@@ -181,39 +181,80 @@ def write_file(name, lines):
     written.append(name)
 
 # ── 1. Country — DATASET_SYMBOL ────────────────────────────────────────────────
+# Shape encodes continent; colour encodes country — two visual dimensions
+# iTOL shapes: 1=circle, 2=square, 3=triangle-up, 4=triangle-down, 5=star, 6=diamond
+CONTINENT_SHAPE = {
+    "Asia":          1,   # circle
+    "Middle East":   1,
+    "Europe":        2,   # square
+    "Africa":        3,   # triangle-up
+    "North America": 4,   # triangle-down
+    "South America": 5,   # star
+    "Oceania":       6,   # diamond
+}
+DEFAULT_SHAPE = 1
+
+COUNTRY_CONTINENT = {
+    "Saudi Arabia": "Asia", "Japan": "Asia", "China": "Asia",
+    "India": "Asia", "Australia": "Oceania",
+    "USA": "North America", "Canada": "North America",
+    "Brazil": "South America", "Argentina": "South America",
+    "Russia": "Europe", "Finland": "Europe", "UK": "Europe",
+    "Germany": "Europe", "France": "Europe", "Netherlands": "Europe",
+    "Belgium": "Europe", "Spain": "Europe", "Italy": "Europe",
+    "Sweden": "Europe", "Norway": "Europe", "Denmark": "Europe",
+    "Rwanda": "Africa", "Nigeria": "Africa", "South Africa": "Africa",
+    "Egypt": "Africa", "Kenya": "Africa",
+}
+
 country_map = {}
 for sid in ids:
-    pm = pub_meta.get(sid, {})
-    c  = pm.get("country", "").split(":")[0].strip()
+    pm  = pub_meta.get(sid, {})
+    lm  = local_meta.get(sid, {})
+    c   = pm.get("country", "").split(":")[0].strip()
+    if not c:
+        c = lm.get("geo_loc_country", "").strip()
     if c:
         country_map[sid] = c
 
 unique_countries = sorted(set(country_map.values()))
 country_colors   = dict(zip(unique_countries, palette(len(unique_countries))))
 
+legend_shapes  = "\t".join(str(CONTINENT_SHAPE.get(COUNTRY_CONTINENT.get(c, ""), DEFAULT_SHAPE))
+                            for c in unique_countries)
+legend_colors  = "\t".join(country_colors[c] for c in unique_countries)
+legend_labels  = "\t".join(unique_countries)
+
 write_file("01_country_symbols.txt", [
     header("DATASET_SYMBOL", "Country", "#333333",
-        "LEGEND_TITLE\tCountry\n"
-        "LEGEND_SHAPES\t" + "\t".join(["1"] * len(unique_countries)) + "\n"
-        "LEGEND_COLORS\t" + "\t".join(country_colors[c] for c in unique_countries) + "\n"
-        "LEGEND_LABELS\t" + "\t".join(unique_countries)),
+        "LEGEND_TITLE\tCountry  (shape=continent)\n"
+        f"LEGEND_SHAPES\t{legend_shapes}\n"
+        f"LEGEND_COLORS\t{legend_colors}\n"
+        f"LEGEND_LABELS\t{legend_labels}"),
     "DATA",
     "#node_id\tsymbol\tsize\tcolor\tfill\tposition",
-    *[f"{sid}\t1\t10\t{country_colors[country_map[sid]]}\t1\t1"
+    *[f"{sid}\t"
+      f"{CONTINENT_SHAPE.get(COUNTRY_CONTINENT.get(country_map[sid], ''), DEFAULT_SHAPE)}\t"
+      f"12\t{country_colors[country_map[sid]]}\t1\t1"
       for sid in ids if sid in country_map],
 ])
 
 # ── 2. Year — DATASET_TEXT ─────────────────────────────────────────────────────
 year_rows = []
 for sid in ids:
+    lm   = local_meta.get(sid, {})
     year = pub_meta.get(sid, {}).get("year", "").strip()
-    if year:
-        year_rows.append(f"{sid}\t{year}\t1\t#555555\t0.8\tnormal\t0")
+    if not year:
+        # local metadata: collection_date is "2019" or "2019-01-01"
+        year = lm.get("collection_date", "").strip()[:4]
+    if year and year.isdigit():
+        year_rows.append(f"{sid}\t{year}\t1\t#555555")
 
 write_file("02_year_labels.txt", [
-    header("DATASET_TEXT", "Year", "#555555", "SHOW_INTERNAL\t0"),
+    header("DATASET_TEXT", "Year", "#555555",
+        "SHOW_INTERNAL\t0\nSIZE_FACTOR\t0.8"),
     "DATA",
-    "#node_id\tlabel\tposition\tcolor\tsize_factor\tstyle\trotation",
+    "#node_id\tlabel\tposition\tcolor",
     *year_rows,
 ])
 
@@ -222,12 +263,13 @@ st_rows = []
 for sid in ids:
     st = by_id[sid].get("mlst_st", "").strip()
     if st and st not in ("-", ""):
-        st_rows.append(f"{sid}\tST{st}\t1\t#222222\t0.8\tnormal\t0")
+        st_rows.append(f"{sid}\tST{st}\t1\t#222222")
 
 write_file("03_st_labels.txt", [
-    header("DATASET_TEXT", "ST", "#222222", "SHOW_INTERNAL\t0"),
+    header("DATASET_TEXT", "ST", "#222222",
+        "SHOW_INTERNAL\t0\nSIZE_FACTOR\t0.8"),
     "DATA",
-    "#node_id\tlabel\tposition\tcolor\tsize_factor\tstyle\trotation",
+    "#node_id\tlabel\tposition\tcolor",
     *st_rows,
 ])
 
@@ -238,12 +280,13 @@ for sid in ids:
     spa = by_id[sid].get("spa_type", "").strip().lower()
     raw = by_id[sid].get("spa_type", "").strip()
     if raw and spa not in spa_skip:
-        spa_rows.append(f"{sid}\t{raw}\t1\t#444444\t0.8\tnormal\t0")
+        spa_rows.append(f"{sid}\t{raw}\t1\t#444444")
 
 write_file("04_spa_labels.txt", [
-    header("DATASET_TEXT", "spa type", "#444444", "SHOW_INTERNAL\t0"),
+    header("DATASET_TEXT", "spa type", "#444444",
+        "SHOW_INTERNAL\t0\nSIZE_FACTOR\t0.8"),
     "DATA",
-    "#node_id\tlabel\tposition\tcolor\tsize_factor\tstyle\trotation",
+    "#node_id\tlabel\tposition\tcolor",
     *spa_rows,
 ])
 
