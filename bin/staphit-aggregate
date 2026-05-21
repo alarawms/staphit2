@@ -265,35 +265,40 @@ def parse_amrfinder(tsv_path):
     return amr_items, point_mutations
 
 
-def parse_kma(res_path):
-    """Parse KMA results file, skipping # header lines."""
+def parse_kma(res_path, min_coverage=80.0, min_depth=0.5):
+    """Parse KMA results file, skipping # header lines.
+
+    KMA reports gene presence even at very low template coverage, which
+    produces false positives (e.g. mecA called at <15% coverage in MSSA
+    genomes due to shared k-mers). Only rows where Template_Coverage
+    (column index 5) >= min_coverage AND Depth (column index 8) >= min_depth
+    are returned. Defaults match standard ResFinder reporting thresholds.
+    """
     results = []
     if not os.path.exists(res_path):
         return results
     with open(res_path, 'r') as f:
-        reader = csv.reader(f, delimiter='\t')
-        # Skip comment lines starting with #
-        first_data = None
-        for row in reader:
-            if row and row[0].startswith('#'):
+        for line in f:
+            line = line.rstrip('\n')
+            if not line or line.startswith('#'):
                 continue
-            first_data = row
-            break
-        # Process first data row
-        if first_data and len(first_data) > 4:
+            row = line.split('\t')
+            if len(row) < 9:
+                continue
+            try:
+                coverage = float(row[5])
+                depth    = float(row[8])
+            except ValueError:
+                continue
+            if coverage < min_coverage or depth < min_depth:
+                continue
             results.append({
-                'gene': first_data[0].strip(),
-                'score': first_data[1].strip(),
-                'identity': first_data[4].strip(),
+                'gene':     row[0].strip(),
+                'score':    row[1].strip(),
+                'identity': row[4].strip(),
+                'coverage': coverage,
+                'depth':    depth,
             })
-        # Process remaining rows
-        for row in reader:
-            if len(row) > 4:
-                results.append({
-                    'gene': row[0].strip(),
-                    'score': row[1].strip(),
-                    'identity': row[4].strip(),
-                })
     return results
 
 

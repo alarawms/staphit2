@@ -13,18 +13,25 @@ from pathlib import Path
 from collections import Counter
 
 if len(sys.argv) < 2:
-    sys.exit("Usage: export_itol.py <results_subdir> [run_name] [pubmlst_metadata.tsv] [local_metadata.csv]")
+    sys.exit("Usage: export_itol.py <results_subdir> [run_name] [pubmlst_metadata.tsv] [local_metadata.csv] [--tree treefile]")
 
-outdir      = Path(sys.argv[1])
-run_name    = sys.argv[2] if len(sys.argv) > 2 else outdir.name
-meta_path   = Path(sys.argv[3]) if len(sys.argv) > 3 else None
-local_meta_path = Path(sys.argv[4]) if len(sys.argv) > 4 else None
+# Pull --tree TREEFILE out of argv before positional parsing
+_argv = sys.argv[1:]
+_tree_idx = next((i for i, a in enumerate(_argv) if a == '--tree'), None)
+if _tree_idx is not None and _tree_idx + 1 < len(_argv):
+    tree_path = Path(_argv[_tree_idx + 1])
+    _argv = _argv[:_tree_idx] + _argv[_tree_idx + 2:]
+else:
+    tree_path = None
 
-summary_file = outdir / "summary" / "combined_summary.tsv"
-cluster_file = outdir / "clusters" / "clusters.tsv"
+outdir          = Path(_argv[0])
+run_name        = _argv[1] if len(_argv) > 1 else outdir.name
+meta_path       = Path(_argv[2]) if len(_argv) > 2 and _argv[2] else None
+local_meta_path = Path(_argv[3]) if len(_argv) > 3 and _argv[3] else None
 
-if not summary_file.exists():
-    sys.exit(f"Not found: {summary_file}")
+summary_file  = outdir / "summary" / "combined_summary.tsv"
+cluster_file  = outdir / "clusters" / "clusters.tsv"
+metadata_only = not summary_file.exists()   # no pipeline output — derive IDs from pub_meta
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 def read_tsv(path):
@@ -58,19 +65,52 @@ def count_genes(gene_str):
         return 0
     return len([g for g in re.split(r'[;,\s]+', gene_str.strip()) if g])
 
+def parse_tree_leaves(treefile):
+    """Return set of leaf labels from a Newick treefile.
+    Must start with a letter to exclude internal bootstrap integers."""
+    text = open(treefile).read()
+    return set(re.findall(r'([A-Za-z][A-Za-z0-9_.\-]*)(?=:[0-9.e+\-])', text))
+
 def parse_binary_virulence(vs, marker):
     """Return 1/0/-1 (present/absent/unknown). iTOL shows -1 as empty."""
     if not vs:
         return -1
     return 1 if f"{marker}+" in vs else 0
 
+def parse_date(raw):
+    """Extract 4-digit year from dd.mm.yy or YYYY-MM-DD strings."""
+    if not raw:
+        return ""
+    raw = raw.strip()
+    m = re.match(r'\d{1,2}[.\-/]\d{1,2}[.\-/](\d{2,4})$', raw)
+    if m:
+        y = m.group(1)
+        return f"20{y}" if len(y) == 2 else y
+    m = re.match(r'(\d{4})', raw)
+    return m.group(1) if m else ""
+
+PATIENT_TYPE_NORM = {
+    "hospitalized": "inpatient", "in": "inpatient", "inpatient": "inpatient",
+    "in-patient": "inpatient", "ip": "inpatient",
+    "out": "outpatient", "outpatient": "outpatient", "op": "outpatient",
+    "out-patient": "outpatient",
+}
+
+def norm_patient_type(raw):
+    return PATIENT_TYPE_NORM.get((raw or "").strip().lower(), "")
+
 # ── Load data ──────────────────────────────────────────────────────────────────
-summary = read_tsv(summary_file)
-by_id   = {r["sample_id"]: r for r in summary}
-ids     = [r["sample_id"] for r in summary]
+if metadata_only:
+    summary = []
+    by_id   = {}
+    ids     = []   # populated after pub_meta is loaded (see below)
+else:
+    summary = read_tsv(summary_file)
+    by_id   = {r["sample_id"]: r for r in summary}
+    ids     = [r["sample_id"] for r in summary]
 
 clusters = {}
-if cluster_file.exists():
+if not metadata_only and cluster_file.exists():
     for r in read_tsv(cluster_file):
         clusters[r["sample_id"]] = r
 
@@ -96,6 +136,118 @@ if not pub_meta:
             if pub_meta:
                 break
 
+# Enrich pub_meta with fetchngs runinfo files:
+# build study_accession→country map from known entries, then fill gaps for
+# accessions from the same study that are missing country.
+_fetchngs_dirs = [
+    outdir.parent / "cc97_run" / "cc97_fetchngs" / "metadata",
+    outdir.parent.parent / "cc97_run" / "cc97_fetchngs" / "metadata",
+    Path("/home/alarawms/hd2/MRSA/cc97_run/cc97_fetchngs/metadata"),
+]
+for _fd in _fetchngs_dirs:
+    if not _fd.is_dir():
+        continue
+    # Pass 1: collect study_accession per run from runinfo files
+    _run_study = {}
+    for _tsv in _fd.glob("*.runinfo_ftp.tsv"):
+        try:
+            with open(_tsv) as _fh:
+                _rows = list(csv.DictReader(_fh, delimiter="\t"))
+            if _rows:
+                _r = _rows[0]
+                _acc = _r.get("run_accession", "").strip()
+                _std = _r.get("study_accession", "").strip()
+                if _acc and _std:
+                    _run_study[_acc] = {"study_accession": _std,
+                                        "study_title": _r.get("study_title", "").strip()}
+        except Exception:
+            pass
+    # Pass 2: study→country from pub_meta entries that already have country
+    _study_country = {}
+    for _acc, _pm in pub_meta.items():
+        _c = _pm.get("country", "").split(":")[0].strip()
+        _std = _run_study.get(_acc, {}).get("study_accession", "")
+        if _c and _c not in ("", "not collected", "not applicable", "missing") and _std:
+            _study_country.setdefault(_std, _c)
+    # Pass 2b: infer country from study title keywords when no other source available
+    _COUNTRY_KEYWORDS = [
+        ("Tanzania", "Tanzania"), ("Netherlands", "Netherlands"),
+        ("Italy", "Italy"), ("Finland", "Finland"), ("Ireland", "Ireland"),
+        ("Saudi Arabia", "Saudi Arabia"), ("UK", "UK"), ("Germany", "Germany"),
+        ("France", "France"), ("Belgium", "Belgium"), ("Sweden", "Sweden"),
+        ("Norway", "Norway"), ("Denmark", "Denmark"), ("USA", "USA"),
+        ("Canada", "Canada"), ("Brazil", "Brazil"), ("Japan", "Japan"),
+        ("Australia", "Australia"), ("Rwanda", "Rwanda"),
+    ]
+    for _acc, _info in _run_study.items():
+        _std = _info["study_accession"]
+        if _std not in _study_country:
+            _title = _info.get("study_title", "")
+            for _kw, _country in _COUNTRY_KEYWORDS:
+                if _kw.lower() in _title.lower():
+                    _study_country[_std] = _country
+                    break
+
+    # Pass 3: fill accessions missing from pub_meta or with blank country
+    _added = 0
+    for _acc, _info in _run_study.items():
+        _std = _info["study_accession"]
+        _c   = _study_country.get(_std, "")
+        if not _c:
+            continue
+        if _acc not in pub_meta:
+            pub_meta[_acc] = {"run_accession": _acc, "country": _c,
+                               "study_accession": _std}
+            _added += 1
+        elif not pub_meta[_acc].get("country", "").strip():
+            pub_meta[_acc]["country"] = _c
+            _added += 1
+    if _added:
+        print(f"Fetchngs runinfo enriched {_added} accessions with study-level country")
+    break
+
+# In metadata-only mode, derive node IDs from pub_meta (ENA accessions)
+if metadata_only:
+    ids = list(pub_meta.keys())
+    print(f"Metadata-only mode: {len(ids)} nodes from pub_meta")
+
+# If a treefile was provided, use its leaf labels as the authoritative ID set.
+# This handles mixed trees (local ID##### + ENA accessions) and avoids writing
+# annotation rows for samples that are not actually in the tree.
+if tree_path:
+    tree_leaves = parse_tree_leaves(tree_path)
+    # Exclude known non-sample labels (Snippy reference genome, etc.)
+    NON_SAMPLE_LABELS = {"Reference", "reference", "REF", "ref", "REFERENCE"}
+    tree_leaves -= NON_SAMPLE_LABELS
+    # Keep IDs already known, filtered to tree; then add any tree leaves not yet listed
+    ids_set = set(ids)
+    ids = [i for i in ids if i in tree_leaves]
+    for leaf in tree_leaves:
+        if leaf not in ids_set:
+            ids.append(leaf)
+    print(f"Treefile filter: {len(tree_leaves)} leaves → {len(ids)} annotation nodes")
+
+    # For mixed trees: if local ID##### leaves are present but we're in metadata_only
+    # mode (no pipeline summary at outdir), try loading pipeline results from results_m/.
+    if metadata_only:
+        local_id_leaves = [l for l in tree_leaves if re.match(r'^ID\d+', l)]
+        if local_id_leaves:
+            for candidate_summary in [
+                Path("results_m") / "summary" / "combined_summary.tsv",
+                Path("results")   / "summary" / "combined_summary.tsv",
+            ]:
+                if candidate_summary.exists():
+                    for r in read_tsv(candidate_summary):
+                        sid = r.get("sample_id", "")
+                        if sid in tree_leaves:
+                            by_id[sid] = r
+                    print(f"Loaded pipeline data for {len(local_id_leaves)} local IDs from {candidate_summary}")
+                    break
+
+# Ensure every node has a (possibly empty) by_id entry so tracks never KeyError
+for _sid in ids:
+    by_id.setdefault(_sid, {})
+
 # Local sample metadata (CSV — sample_id, collected_by, host_body_site, geo_loc_region, host …)
 local_meta = {}
 if local_meta_path and local_meta_path.exists():
@@ -120,6 +272,38 @@ else:
             if local_meta:
                 print(f"Local metadata loaded from: {candidate}  ({len(local_meta)} samples)")
                 break
+
+# Always augment local_meta with MRSA.csv (adds city, region_sa, gender,
+# patient_type and fills any gaps in collected_by / host_body_site / collection_date)
+mrsa_csv_candidate = Path("/home/alarawms/hd2/MRSA/csvs/MRSA.csv")
+if mrsa_csv_candidate.exists():
+    augmented = 0
+    with open(mrsa_csv_candidate) as fh:
+        for r in csv.DictReader(fh):
+            sid = r.get("UID", "").strip()
+            if not sid.startswith("ID"):
+                continue
+            extra = {
+                "city":            r.get("City", "").strip(),
+                "region_sa":       r.get("Region", "").strip(),
+                "gender":          r.get("gender", "").strip().upper(),
+                "patient_type":    norm_patient_type(r.get("in-patient/out-patient", "")),
+                "geo_loc_country": "Saudi Arabia",
+            }
+            # Fill gaps for fields that may be missing from sample_metadata.csv
+            if not local_meta.get(sid, {}).get("collected_by"):
+                extra["collected_by"]    = r.get("hospital", "").strip()
+            if not local_meta.get(sid, {}).get("host_body_site"):
+                extra["host_body_site"]  = r.get("isolation site", "").strip()
+            if not local_meta.get(sid, {}).get("collection_date"):
+                extra["collection_date"] = parse_date(r.get("date", ""))
+            if sid in local_meta:
+                local_meta[sid].update(extra)
+            else:
+                local_meta[sid] = {"sample_id": sid, "host": "Human", **extra}
+            augmented += 1
+    if augmented:
+        print(f"MRSA.csv augmented {augmented} samples with city/region/gender/patient_type")
 
 # ── Source normalisation map (body site / specimen type) ──────────────────────
 SOURCE_NORM = {
@@ -176,6 +360,14 @@ itol_dir.mkdir(parents=True, exist_ok=True)
 written = []
 
 def write_file(name, lines):
+    # Skip files that have a DATA section but zero data rows (iTOL rejects them)
+    try:
+        data_idx = lines.index("DATA")
+        data_rows = [l for l in lines[data_idx + 1:] if l and not l.startswith("#")]
+        if not data_rows:
+            return
+    except ValueError:
+        pass
     p = itol_dir / name
     p.write_text("\n".join(lines) + "\n")
     written.append(name)
@@ -245,63 +437,103 @@ for sid in ids:
     lm   = local_meta.get(sid, {})
     year = pub_meta.get(sid, {}).get("year", "").strip()
     if not year:
-        # local metadata: collection_date is "2019" or "2019-01-01"
-        year = lm.get("collection_date", "").strip()[:4]
-    if year and year.isdigit():
-        year_rows.append(f"{sid}\t{year}\t1\t#555555")
+        cd = lm.get("collection_date", "").strip()
+        year = parse_date(cd) if cd else ""
+    if year and year.isdigit() and len(year) == 4:
+        year_rows.append(f"{sid}\t{year}\t1\t#555555\tnormal\t0.8\t0")
 
 write_file("02_year_labels.txt", [
-    header("DATASET_TEXT", "Year", "#555555",
-        "SHOW_INTERNAL\t0\nSIZE_FACTOR\t0.8"),
+    header("DATASET_TEXT", "Year", "#555555", "SHOW_INTERNAL\t0"),
     "DATA",
-    "#node_id\tlabel\tposition\tcolor",
+    "#node_id\tlabel\tposition\tcolor\tstyle\tsize_factor\trotation",
     *year_rows,
 ])
 
 # ── 3. ST — DATASET_TEXT ───────────────────────────────────────────────────────
 st_rows = []
 for sid in ids:
-    st = by_id[sid].get("mlst_st", "").strip()
+    st = (by_id[sid].get("mlst_st", "") or
+          pub_meta.get(sid, {}).get("ST", "") or
+          pub_meta.get(sid, {}).get("mlst_st", "")).strip().lstrip("ST")
     if st and st not in ("-", ""):
-        st_rows.append(f"{sid}\tST{st}\t1\t#222222")
+        st_rows.append(f"{sid}\tST{st}\t1\t#222222\tnormal\t0.8\t0")
 
 write_file("03_st_labels.txt", [
-    header("DATASET_TEXT", "ST", "#222222",
-        "SHOW_INTERNAL\t0\nSIZE_FACTOR\t0.8"),
+    header("DATASET_TEXT", "ST", "#222222", "SHOW_INTERNAL\t0"),
     "DATA",
-    "#node_id\tlabel\tposition\tcolor",
+    "#node_id\tlabel\tposition\tcolor\tstyle\tsize_factor\trotation",
     *st_rows,
 ])
 
 # ── 4. spa type — DATASET_TEXT ─────────────────────────────────────────────────
-spa_skip = {"", "-", "not_determined", "undetermined", "not determined"}
+spa_skip = {"", "-", "not_determined", "undetermined", "not determined", "unknown", "nd"}
 spa_rows = []
 for sid in ids:
-    spa = by_id[sid].get("spa_type", "").strip().lower()
-    raw = by_id[sid].get("spa_type", "").strip()
-    if raw and spa not in spa_skip:
-        spa_rows.append(f"{sid}\t{raw}\t1\t#444444")
+    raw = (by_id[sid].get("spa_type", "") or
+           pub_meta.get(sid, {}).get("spa_type", "")).strip()
+    if raw and raw.lower() not in spa_skip:
+        spa_rows.append(f"{sid}\t{raw}\t1\t#444444\tnormal\t0.8\t0")
 
 write_file("04_spa_labels.txt", [
-    header("DATASET_TEXT", "spa type", "#444444",
-        "SHOW_INTERNAL\t0\nSIZE_FACTOR\t0.8"),
+    header("DATASET_TEXT", "spa type", "#444444", "SHOW_INTERNAL\t0"),
     "DATA",
-    "#node_id\tlabel\tposition\tcolor",
+    "#node_id\tlabel\tposition\tcolor\tstyle\tsize_factor\trotation",
     *spa_rows,
 ])
 
 # ── 5. SCCmec — DATASET_COLORSTRIP ────────────────────────────────────────────
 SCCMEC_COLORS = {
-    "MSSA":                "#d9d9d9",
-    "Type IV":             "#4daf4a",
-    "Type IVa":            "#4daf4a",
-    "Type IVb":            "#6dbf6d",
-    "Type IVc":            "#8fd08f",
-    "Type IVd":            "#b2e0b2",
-    "Type V":              "#377eb8",
-    "Type VII":            "#ff7f00",
-    "Type XI":             "#984ea3",
-    "Composite (Type IV)": "#a8d978",
+    # MSSA / not typed
+    "MSSA":                   "#d9d9d9",
+    # Type I  — steel blue family
+    "Type I":                 "#1f78b4",
+    "Type I (est.)":          "#a6cee3",
+    "Type Ia":                "#74afd3",
+    # Type II — crimson family
+    "Type II":                "#e31a1c",
+    "Type II (est.)":         "#f9c0c0",
+    "Type IIa":               "#f07575",
+    "Type IIb":               "#f7aaaa",
+    # Type III — forest green family
+    "Type III":               "#33a02c",
+    "Type III (est.)":        "#b2df8a",
+    "Type IIIa":              "#7dc778",
+    # Type IV — amber/orange family (solid = identified, lighter = estimated/composite)
+    "Type IV":                "#ff7f00",
+    "Type IV (est.)":         "#fff0db",
+    "Type IVa":               "#ffaa55",
+    "Type IVb":               "#ffc180",
+    "Type IVc":               "#ffd4a8",
+    "Type IVd":               "#ffe3c2",
+    "Composite (Type IV)":    "#ffeedb",
+    # Type V  — purple family
+    "Type V":                 "#6a3d9a",
+    "Type V (est.)":          "#cab2d6",
+    "Type Va":                "#a882c8",
+    # Type VI — brown-orange family
+    "Type VI":                "#b15928",
+    "Type VI (est.)":         "#d4956a",
+    "Composite (Type VI)":    "#e8c5a8",
+    # Type VII — magenta/pink family
+    "Type VII":               "#c51b7d",
+    "Type VII (est.)":        "#f781bf",
+    "Type VIIa":              "#e07db3",
+    # Type VIII — teal family
+    "Type VIII":              "#1b9e77",
+    "Type VIII (est.)":       "#66c2a5",
+    # Type IX  — brown family
+    "Type IX":                "#a65628",
+    "Type IX (est.)":         "#d4a574",
+    # Type XI  — yellow-green family
+    "Type XI":                "#66a61e",
+    "Type XI (est.)":         "#c8e69a",
+    "Type XIa":               "#a3cc6b",
+    # Type XII — gold family
+    "Type XII":               "#e6ab02",
+    "Type XII (est.)":        "#f5d670",
+    # Type XIV — cyan family
+    "Type XIV":               "#17becf",
+    "Type XIV (est.)":        "#9edae5",
 }
 SCCMEC_DEFAULT = "#eeeeee"
 SCCMEC_MSSA    = {"", "-", "ND", "not detected", "Negative", "MSSA"}
@@ -502,6 +734,202 @@ write_file("13_hospital_strip.txt", [
     "#node_id\tcolor\tlabel",
     *[f"{sid}\t{hosp_colors[h]}\t{h}" for sid, h in hosp_vals.items()],
 ])
+
+# ── 14. City — DATASET_COLORSTRIP ─────────────────────────────────────────────
+CITY_COLORS = {
+    "Jeddah":   "#377eb8", "Jed-env":  "#a6cee3",
+    "Riyadh":   "#e41a1c", "Madina":   "#4daf4a",
+    "Hail":     "#ff7f00", "Hasa":     "#984ea3",
+    "AlHasaa":  "#984ea3", "Makkah":   "#a65628",
+    "Taif":     "#f781bf", "Tabuk":    "#999999",
+    "Jazan":    "#1b9e77", "Jizan":    "#1b9e77",
+    "Abha":     "#d95f02", "Najran":   "#7570b3",
+    "Qassim":   "#e7298a",
+}
+CITY_DEFAULT = "#dddddd"
+
+city_vals = {}
+for sid in ids:
+    lm = local_meta.get(sid, {})
+    c  = lm.get("city", "").strip()
+    if c:
+        city_vals[sid] = c
+
+unique_cities  = sorted(set(city_vals.values()))
+city_color_map = {c: CITY_COLORS.get(c, CITY_DEFAULT) for c in unique_cities}
+
+if city_vals:
+    write_file("14_city_strip.txt", [
+        header("DATASET_COLORSTRIP", "City", "#333333",
+            "COLOR_BRANCHES\t0\nSHOW_LABELS\t1\nLABEL_SIZE\t0.8\n"
+            "LEGEND_TITLE\tCity\n"
+            "LEGEND_SHAPES\t"  + "\t".join(["1"] * len(unique_cities)) + "\n"
+            "LEGEND_COLORS\t"  + "\t".join(city_color_map[c] for c in unique_cities) + "\n"
+            "LEGEND_LABELS\t"  + "\t".join(unique_cities)),
+        "DATA",
+        "#node_id\tcolor\tlabel",
+        *[f"{sid}\t{city_color_map.get(v, CITY_DEFAULT)}\t{v}"
+          for sid, v in city_vals.items()],
+    ])
+
+# ── 15. Region (Saudi Arabia) — DATASET_COLORSTRIP ────────────────────────────
+REGION_COLORS = {
+    "Central":  "#e41a1c", "Western":  "#377eb8",
+    "Eastern":  "#4daf4a", "Northern": "#ff7f00", "Southern": "#984ea3",
+}
+REGION_NORM = {
+    "central": "Central", "western": "Western", "eastrn": "Eastern",
+    "eastern": "Eastern", "northern": "Northern", "southern": "Southern",
+    "south western": "Southern",
+}
+
+region_vals = {}
+for sid in ids:
+    lm = local_meta.get(sid, {})
+    raw = lm.get("region_sa", "").strip()
+    v   = REGION_NORM.get(raw.lower(), raw.title()) if raw else ""
+    if v:
+        region_vals[sid] = v
+
+unique_regions   = sorted(set(region_vals.values()))
+region_color_map = {r: REGION_COLORS.get(r, "#cccccc") for r in unique_regions}
+
+if region_vals:
+    write_file("15_region_strip.txt", [
+        header("DATASET_COLORSTRIP", "Region (SA)", "#333333",
+            "COLOR_BRANCHES\t0\nSHOW_LABELS\t1\nLABEL_SIZE\t0.8\n"
+            "LEGEND_TITLE\tRegion (Saudi Arabia)\n"
+            "LEGEND_SHAPES\t"  + "\t".join(["1"] * len(unique_regions)) + "\n"
+            "LEGEND_COLORS\t"  + "\t".join(region_color_map[r] for r in unique_regions) + "\n"
+            "LEGEND_LABELS\t"  + "\t".join(unique_regions)),
+        "DATA",
+        "#node_id\tcolor\tlabel",
+        *[f"{sid}\t{region_color_map.get(v, '#cccccc')}\t{v}"
+          for sid, v in region_vals.items()],
+    ])
+
+# ── 16. Isolation site — DATASET_COLORSTRIP ───────────────────────────────────
+ISO_NORM = {
+    # Wound / abscess
+    "wound": "Wound", "wound culture": "Wound", "wound cultuer": "Wound",
+    "wound cultur": "Wound", "wound abdomen in": "Wound", "wound scalp": "Wound",
+    "abscess": "Wound", "abscess/wound": "Wound", "abscess wound out": "Wound",
+    "absscess": "Wound", "pus": "Wound", "tissue": "Wound", "toe/tissue": "Wound",
+    # Nasal / screening
+    "nasal swap": "Nasal/Screen", "nasal swab": "Nasal/Screen",
+    "nasal": "Nasal/Screen", "nasal screen": "Nasal/Screen", "screening": "Nasal/Screen",
+    "nose": "Nasal/Screen", "nsal": "Nasal/Screen",
+    # Respiratory
+    "respiratory": "Respiratory", "respiratory culture": "Respiratory",
+    "respiratory cultuer": "Respiratory", "respirator ycultuer": "Respiratory",
+    "respirator yculture": "Respiratory", "sputum": "Respiratory",
+    "sputum lung": "Respiratory", "lung": "Respiratory",
+    "tracheal aspirate": "Respiratory", "endotracheal aspirate": "Respiratory",
+    "tracheal": "Respiratory", "endt asp": "Respiratory", "endt sterile": "Respiratory",
+    "throat swap": "Respiratory",
+    # Blood
+    "blood": "Blood", "blood culture": "Blood", "blood cultuer": "Blood",
+    "peripheral": "Blood",
+    # Urine
+    "urine": "Urine", "urine culture": "Urine", "urine cultuer": "Urine",
+    # CSF/Fluid
+    "csf": "CSF/Fluid", "fluid": "CSF/Fluid", "c fliud": "CSF/Fluid",
+    # Skin / soft tissue
+    "skin": "Skin", "swab skin": "Skin", "groin": "Skin", "buttock": "Skin",
+    "finger": "Skin", "left foot": "Skin", "left hip": "Skin",
+    "umbilical": "Skin", "peg site": "Skin", "genital": "Skin",
+    "high vagainal swap": "Genital", "high vaginal swap": "Genital",
+    # Ear / Eye
+    "ear": "Ear/Eye", "ear culture": "Ear/Eye", "ear caltuer": "Ear/Eye",
+    "eye": "Ear/Eye", "eye swap": "Ear/Eye", "eye swap swab": "Ear/Eye",
+    # Bone/Joint
+    "bone": "Bone/Joint", "joint": "Bone/Joint",
+    # Environmental / milk
+    "environment": "Environmental", "env sample": "Environmental",
+    "milk": "Milk/Bovine", "bulk tank milk": "Milk/Bovine",
+    # Ignore
+    "false": "", "=false()": "", "irrecoverable": "",
+    "contaminated from original source": "", "miscellaneous cultuer": "",
+}
+ISO_COLORS = {
+    "Wound":          "#e31a1c", "Nasal/Screen":   "#6a3d9a",
+    "Respiratory":    "#1f78b4", "Blood":          "#b2182b",
+    "Urine":          "#fdae61", "CSF/Fluid":      "#4d9221",
+    "Skin":           "#f46d43", "Ear/Eye":        "#74add1",
+    "Bone/Joint":     "#762a83", "Environmental":  "#66bd63",
+    "Milk/Bovine":    "#d8b365", "Genital":        "#c51b7d",
+}
+ISO_DEFAULT = "#cccccc"
+
+iso_vals = {}
+for sid in ids:
+    lm  = local_meta.get(sid, {})
+    raw = lm.get("host_body_site", "").strip()
+    v   = ISO_NORM.get(raw.lower(), raw.title() if raw else "")
+    if v:
+        iso_vals[sid] = v
+
+unique_iso   = sorted(set(iso_vals.values()))
+iso_color_map = {s: ISO_COLORS.get(s, ISO_DEFAULT) for s in unique_iso}
+
+if iso_vals:
+    write_file("16_isolation_site_strip.txt", [
+        header("DATASET_COLORSTRIP", "Isolation site", "#333333",
+            "COLOR_BRANCHES\t0\nSHOW_LABELS\t1\nLABEL_SIZE\t0.8\n"
+            "LEGEND_TITLE\tIsolation site\n"
+            "LEGEND_SHAPES\t"  + "\t".join(["1"] * len(unique_iso)) + "\n"
+            "LEGEND_COLORS\t"  + "\t".join(iso_color_map[s] for s in unique_iso) + "\n"
+            "LEGEND_LABELS\t"  + "\t".join(unique_iso)),
+        "DATA",
+        "#node_id\tcolor\tlabel",
+        *[f"{sid}\t{iso_color_map.get(v, ISO_DEFAULT)}\t{v}"
+          for sid, v in iso_vals.items()],
+    ])
+
+# ── 17. Gender — DATASET_BINARY ───────────────────────────────────────────────
+GENDER_MAP = {"M": 1, "MALE": 1, "F": 0, "FEMALE": 0}
+
+gender_data = [
+    f"{sid}\t{GENDER_MAP[g]}"
+    for sid in ids
+    if sid in local_meta
+    for g in [local_meta[sid].get("gender", "").strip().upper()]
+    if g in GENDER_MAP
+]
+
+if gender_data:
+    write_file("17_gender_binary.txt", [
+        header("DATASET_BINARY", "Gender", "#c51b7d",
+            "FIELD_SHAPES\t1\nFIELD_LABELS\tMale\nFIELD_COLORS\t#4393c3"),
+        "DATA",
+        "#node_id\tMale(1)/Female(0)",
+        *gender_data,
+    ])
+
+# ── 18. Patient type — DATASET_COLORSTRIP ─────────────────────────────────────
+PT_COLORS = {"inpatient": "#d73027", "outpatient": "#74add1"}
+PT_LABEL  = {"inpatient": "Inpatient", "outpatient": "Outpatient"}
+
+pt_vals = {
+    sid: local_meta[sid].get("patient_type", "").strip()
+    for sid in ids
+    if sid in local_meta and local_meta[sid].get("patient_type", "").strip()
+}
+unique_pt = sorted(set(pt_vals.values()))
+
+if pt_vals:
+    write_file("18_patient_type_strip.txt", [
+        header("DATASET_COLORSTRIP", "Patient type", "#333333",
+            "COLOR_BRANCHES\t0\nSHOW_LABELS\t1\nLABEL_SIZE\t0.8\n"
+            "LEGEND_TITLE\tPatient type\n"
+            "LEGEND_SHAPES\t"  + "\t".join(["1"] * len(unique_pt)) + "\n"
+            "LEGEND_COLORS\t"  + "\t".join(PT_COLORS.get(t, "#cccccc") for t in unique_pt) + "\n"
+            "LEGEND_LABELS\t"  + "\t".join(PT_LABEL.get(t, t.title()) for t in unique_pt)),
+        "DATA",
+        "#node_id\tcolor\tlabel",
+        *[f"{sid}\t{PT_COLORS.get(v, '#cccccc')}\t{PT_LABEL.get(v, v)}"
+          for sid, v in pt_vals.items()],
+    ])
 
 # ── Summary ────────────────────────────────────────────────────────────────────
 print(f"\niTOL files written to: {itol_dir}/")

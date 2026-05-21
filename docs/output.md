@@ -324,6 +324,58 @@ When `--tree_builder fasttree` is selected, output appears in `fasttree/` contai
 
 [SNP-dists](https://github.com/tseemann/snp-dists) computes pairwise SNP distances from the core genome alignment. This matrix is consumed by the clustering module and is also useful for manual inspection of isolate relatedness.
 
+### itol/
+
+<details markdown="1">
+<summary>Output files</summary>
+
+- `itol/`
+  - `01_sccmec.txt`: SCCmec type — colour strip.
+  - `02_mlst.txt`: MLST sequence type — colour strip.
+  - `03_agr.txt`: *agr* group (I–IV) — colour strip.
+  - `04_pvl.txt`: PVL status (positive/negative) — binary symbol.
+  - `05_spa.txt`: *spa* type label — text dataset.
+  - `06_st_label.txt`: ST label — text dataset.
+  - `07_amr_class.txt`: AMR drug-class presence — binary dataset.
+  - `08_virulence.txt`: Selected virulence genes — binary dataset.
+  - `09_origin.txt`: Infection origin (HA/CA/LA) — colour strip.
+  - `10_country.txt`: Country of isolation — colour strip.
+  - `11_host.txt`: Host (human/animal/environmental) — colour strip.
+  - `12_source.txt`: Sample source (blood/wound/screen, etc.) — colour strip.
+  - `13_hospital.txt`: Hospital/facility — text dataset.
+  - `14_year.txt`: Collection year — colour strip (gradient).
+  - `15_gender.txt`: Patient gender — colour strip.
+  - `16_patient_type.txt`: Patient type (inpatient/outpatient) — colour strip.
+  - `17_city.txt`: City of collection — text dataset.
+  - `18_region.txt`: Administrative region — colour strip.
+
+</details>
+
+The iTOL annotation export (`bin/export_itol.py`) generates ready-to-upload annotation files for [iTOL (Interactive Tree of Life)](https://itol.embl.de/). Each file corresponds to one annotation track and is formatted according to the iTOL dataset specification for its type (DATASET_COLORSTRIP, DATASET_TEXT, DATASET_BINARY, DATASET_SYMBOL).
+
+The script draws annotation data from three sources, checked in priority order:
+
+| Source | Contents | Applies to |
+|--------|----------|-----------|
+| `results/summary/combined_summary.tsv` | Pipeline typing output (ST, SCCmec, spa, agr, AMR, virulence, origin) | All samples that passed QC |
+| `--pub_meta` TSV | Manually curated public metadata (country, year, ST, spa) | Public ENA/SRA accessions |
+| `--local_meta` CSV | Local cohort metadata (hospital, city, region, gender, patient type) | Local sequenced samples |
+
+Only tracks with at least one data value are written to disk. Tracks whose data is entirely absent (e.g. hospital for a public-data-only tree) produce no file.
+
+**Generating iTOL annotations:**
+
+```bash
+python bin/export_itol.py \
+    results/ \
+    my_run \
+    --tree results/iqtree/core.treefile \
+    cc97_metadata.tsv \
+    assets/sample_metadata.csv
+```
+
+The `--tree` flag is strongly recommended: it uses the treefile as the authoritative source of node IDs, resolves mismatches between metadata keys and tree labels, and automatically excludes the Snippy reference genome node (`Reference`) which would otherwise appear as an unannotated leaf.
+
 ---
 
 ## Aggregation and reporting

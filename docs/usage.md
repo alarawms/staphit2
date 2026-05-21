@@ -278,6 +278,129 @@ The version number is recorded in the MultiQC report and in `results/pipeline_in
 
 To repeat a run with identical settings, reuse a [params file](#using-a-params-file). When sharing params files (e.g. as supplementary material), remove any cluster-specific paths or institutional profile references.
 
+## Clonal complex surveillance
+
+This section describes the full workflow for building a curated phylogenetic tree from a mixture of locally sequenced isolates and public data from a target clonal complex (e.g. CC97).
+
+### 1. Curate confirmed accessions
+
+Start from a list of ENA/SRA accessions and cross-reference them against a metadata table that contains sequence-type (ST) information. Only accessions with a confirmed CC97 sequence type (ST97 or a known single-locus variant) should enter the pipeline. The script `bin/filter_cc97_samplesheet.py` handles the post-run filtering step, but manual pre-curation of the accession list is also recommended to avoid downloading large volumes of non-CC97 data.
+
+CC97 includes the following sequence types (STs):
+
+| ST | Relationship to ST97 |
+|----|---------------------|
+| 97 | Founder |
+| 1153 | Single-locus variant (SLV) |
+| 1465 | SLV |
+| 3187 | SLV |
+| 8064 | SLV |
+| 2996 | SLV |
+| 5435 | SLV |
+| 3528 | SLV |
+| 2458 | SLV |
+| 3009 | SLV |
+| 7570 | SLV |
+| 3636 | SLV |
+| 5264 | SLV |
+
+Accessions from general surveillance studies that do not report ST metadata cannot be confirmed as CC97 and should be excluded until after typing.
+
+### 2. Download public reads with fetchngs
+
+Create a CSV with one ENA/SRA accession per line (header: `id`) and run nf-core/fetchngs:
+
+```bash
+nextflow run nf-core/fetchngs \
+    --input cc97_accessions_to_fetch.csv \
+    --outdir cc97_fetchngs \
+    -profile docker \
+    -resume
+```
+
+Downloaded FASTQ files appear in `cc97_fetchngs/fastq/`. Each accession also produces a `*.runinfo_ftp.tsv` metadata file in `cc97_fetchngs/metadata/` containing study information and available fields from ENA.
+
+### 3. Build the combined samplesheet
+
+Combine locally sequenced samples with the downloaded public samples into a single samplesheet. Local samples use internal IDs (e.g. `ID00001`); public samples use their ENA run accession (e.g. `ERR1234567`).
+
+```csv
+sample,fastq_1,fastq_2
+ID00001,/path/to/ID00001_R1.fastq.gz,/path/to/ID00001_R2.fastq.gz
+ERR1234567,cc97_fetchngs/fastq/ERR1234567_1.fastq.gz,cc97_fetchngs/fastq/ERR1234567_2.fastq.gz
+```
+
+### 4. Run the pipeline
+
+Use `--phylo_method snippy` for CC97 collections. Panaroo (the default) can fail with `KeyError` on highly fragmented assemblies from older public datasets; Snippy-based alignment is more robust for mixed-quality inputs.
+
+```bash
+nextflow run alarawms/staphit2 \
+    -profile docker \
+    --input cc97_combined_samplesheet.csv \
+    --outdir results \
+    --phylo_method snippy \
+    --reference assets/nctc8325.fasta \
+    --metadata assets/sample_metadata.csv \
+    -resume
+```
+
+> [!NOTE]
+> The Snippy reference genome node (`Reference`) will appear as a leaf in the tree produced by `snippy_core`. It is automatically excluded from iTOL annotations by `export_itol.py` when `--tree` is provided.
+
+### 5. Filter to confirmed CC97 by MLST
+
+After the run completes, use `bin/filter_cc97_samplesheet.py` to remove any samples that did not type as CC97:
+
+```bash
+python bin/filter_cc97_samplesheet.py \
+    results/ \
+    cc97_combined_samplesheet.csv \
+    cc97_filtered_samplesheet.csv
+```
+
+This script reads `results/summary/combined_summary.tsv`, keeps all samples with a CC97 sequence type, keeps local IDs (`ID*`) that had no MLST result (QC failures within the local cohort are reviewed separately), and drops public accessions that failed assembly QC or typed as non-CC97. A summary is printed showing counts and the ST distribution of retained samples.
+
+### 6. Rebuild the tree on the filtered set
+
+Re-run the pipeline on the filtered samplesheet. Nextflow `-resume` will reuse all cached typing results; only the alignment and tree steps will rerun:
+
+```bash
+nextflow run alarawms/staphit2 \
+    -profile docker \
+    --input cc97_filtered_samplesheet.csv \
+    --outdir results \
+    --phylo_method snippy \
+    --reference assets/nctc8325.fasta \
+    --metadata assets/sample_metadata.csv \
+    -resume
+```
+
+### 7. Generate iTOL annotations
+
+Export annotation tracks for the filtered tree:
+
+```bash
+python bin/export_itol.py \
+    results/ \
+    cc97 \
+    --tree results/iqtree/core.treefile \
+    cc97_metadata.tsv \
+    assets/sample_metadata.csv
+```
+
+Annotation files are written to `results/itol/`. Upload the treefile and annotation files to [iTOL](https://itol.embl.de/) for interactive visualization. See the [itol/ output section](output.md#itol) for a description of each track.
+
+**Annotation data sources for mixed local + public trees:**
+
+| Annotation track | Local samples | Public (ENA) samples |
+|-----------------|---------------|----------------------|
+| ST, SCCmec, spa, agr, AMR, virulence, origin | `combined_summary.tsv` | `combined_summary.tsv` (if passed QC) |
+| Country, year | `combined_summary.tsv` | `cc97_metadata.tsv` |
+| Hospital, city, region, gender, patient type | `sample_metadata.csv` | Not available |
+
+Public samples that failed assembly QC (CheckM2 completeness < 90%) pass Snippy alignment and therefore appear in the tree but have no typing data. Their annotation tracks will be blank for all fields except country and year (if present in the metadata TSV).
+
 ## Core Nextflow arguments
 
 > [!NOTE]
