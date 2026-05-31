@@ -1,7 +1,7 @@
 process SCCMEC {
     tag "$meta.id"
     label 'process_low'
-    container 'docker.io/alarawms/sccmec_typer:v2'
+    container 'docker.io/alarawms/sccmec_typer:latest'
     containerOptions '--entrypoint ""'
     publishDir "${params.outdir}/sccmec/${meta.id}", mode: 'copy'
 
