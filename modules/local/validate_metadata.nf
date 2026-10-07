@@ -1,7 +1,6 @@
 process VALIDATE_METADATA {
     label 'process_low'
-    publishDir "${params.outdir}/metadata", mode: 'copy'
-    container 'docker.io/python:3.9'
+    container 'ghcr.io/alarawms/staphit2-python:1.0.0'
 
     input:
     path metadata_csv
@@ -10,17 +9,23 @@ process VALIDATE_METADATA {
 
     output:
     path "metadata.json", emit: json
+    tuple val("${task.process}"), val('python'), eval("python3 --version | sed 's/Python //'"), topic: versions, emit: versions_python
 
     script:
     def abg_flag = antibiogram_csv.name != 'NO_ANTIBIOGRAM' ? "--antibiogram ${antibiogram_csv}" : ''
     """
-    python3 ${projectDir}/bin/staphit-metadata validate \
+    staphit-metadata validate \
         --metadata ${metadata_csv} \
         --samplesheet ${samplesheet} \
         ${abg_flag} || true
-    python3 ${projectDir}/bin/staphit-metadata normalize \
+    staphit-metadata normalize \
         --metadata ${metadata_csv} \
         ${abg_flag} \
         -o metadata.json
+    """
+
+    stub:
+    """
+    echo '{}' > metadata.json
     """
 }

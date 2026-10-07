@@ -1,6 +1,8 @@
 .nextflow*
 work/
 data/
+# tiny stub-test fixtures
+!tests/data/
 results/
 results_*/
 test_results/

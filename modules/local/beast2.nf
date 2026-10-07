@@ -1,8 +1,7 @@
 process BEAST2 {
     tag "beast2"
     label 'process_high'
-    publishDir "${params.outdir}/beast2", mode: 'copy'
-    container 'quay.io/biocontainers/beast2:2.7.7--hdfd78af_1'
+    container 'quay.io/biocontainers/beast2:2.7.7--he65b2d3_0'
 
     input:
     path alignment       // core.aln from snippy-core
@@ -13,6 +12,7 @@ process BEAST2 {
     path "beast_mcc.tree",   emit: mcc_tree,  optional: true
     path "beast_*.log",      emit: log,        optional: true
     path "beast_*.trees",    emit: trees,      optional: true
+    tuple val("${task.process}"), val('beast2'), eval("beast -version 2>&1 | grep -o 'v[0-9.]*' | head -1 | tr -d v"), topic: versions, emit: versions_beast2
 
     script:
     def meta_arg = metadata.name != 'NO_METADATA' ? "--metadata ${metadata}" : ""
@@ -29,5 +29,10 @@ process BEAST2 {
     beast -overwrite beast_run.xml
 
     treeannotator -burnin 10 -heights mean beast_run.trees beast_mcc.tree
+    """
+
+    stub:
+    """
+    touch beast_mcc.tree
     """
 }

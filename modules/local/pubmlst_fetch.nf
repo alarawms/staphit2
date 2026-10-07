@@ -1,7 +1,7 @@
 process PUBMLST_FETCH {
     tag "${params.cc ? "CC${params.cc}" : "ST${params.st}"}"
     label 'process_single'
-    container 'docker.io/python:3.11'
+    container 'ghcr.io/alarawms/staphit2-python:1.0.0'
 
     input:
     path fetch_script
@@ -9,6 +9,7 @@ process PUBMLST_FETCH {
     output:
     path "accessions.txt", emit: accessions
     path "metadata.tsv",   emit: metadata
+    tuple val("${task.process}"), val('python'), eval("python3 --version | sed 's/Python //'"), topic: versions, emit: versions_python
 
     script:
     def cc_arg  = params.cc               ? "--cc ${params.cc}"                     : ""
@@ -21,13 +22,17 @@ process PUBMLST_FETCH {
     def yt_arg  = params.fetch_year_to    ? "--year-to ${params.fetch_year_to}"     : ""
     def max_arg = params.fetch_max        ? "--max-downloads ${params.fetch_max}"   : ""
     """
-    pip install -q --target \$PWD/pylibs requests oauthlib requests-oauthlib
-    PYTHONPATH=\$PWD/pylibs python ${fetch_script} \\
+    python ${fetch_script} \\
         ${cc_arg} ${st_arg} ${src_arg} \\
         ${ctr_arg} ${con_arg} ${hst_arg} \\
         ${yf_arg} ${yt_arg} ${max_arg} \\
         --sra-only \\
         --out metadata.tsv \\
         --accessions accessions.txt
+    """
+
+    stub:
+    """
+    touch accessions.txt metadata.tsv
     """
 }

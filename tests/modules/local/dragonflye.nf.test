@@ -1,0 +1,45 @@
+nextflow_process {
+
+    name "Test DRAGONFLYE"
+    script "../../../modules/local/dragonflye.nf"
+    process "DRAGONFLYE"
+    tag "dragonflye"
+    options "-stub"
+
+    test("long-only - stub") {
+        when {
+            process {
+                """
+                input[0] = [ [id: 'L1', mode: 'long'], file("${projectDir}/tests/data/stub/long_ont.fastq.gz", checkIfExists: true), [] ]
+                """
+            }
+        }
+        then {
+            assertAll(
+                { assert process.success },
+                { assert process.out.scaffolds[0][1].endsWith('L1.scaffolds.fasta') },
+                { assert snapshot(process.out.versions_dragonflye, process.out.versions_flye).match() }
+            )
+        }
+    }
+
+    test("hybrid - stub") {
+        when {
+            process {
+                """
+                input[0] = [ [id: 'H1', mode: 'hybrid'],
+                             file("${projectDir}/tests/data/stub/hybrid_ont.fastq.gz", checkIfExists: true),
+                             [ file("${projectDir}/tests/data/stub/hybrid_R1.fastq.gz", checkIfExists: true),
+                               file("${projectDir}/tests/data/stub/hybrid_R2.fastq.gz", checkIfExists: true) ] ]
+                """
+            }
+        }
+        then {
+            assertAll(
+                { assert process.success },
+                { assert process.out.scaffolds[0][1].endsWith('H1.scaffolds.fasta') },
+                { assert process.out.gfa.size() == 1 }
+            )
+        }
+    }
+}

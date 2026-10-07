@@ -44,6 +44,7 @@ workflow QC_ASSEMBLY {
     ch_trimmed = RASUSA.out.reads
 
     FASTQC ( ch_trimmed )
+    ch_versions = ch_versions.mix(FASTQC.out.versions)
 
     // ── Long reads (long + hybrid samples): NanoPlot QC ─────────────────────
     ch_long = ch_reads.filter { _meta, _sr, lr -> lr }.map { meta, _sr, lr -> [ meta, lr ] }
@@ -104,14 +105,20 @@ workflow QC_ASSEMBLY {
     //
     // MODULE: Download CheckM2 database (runs once)
     //
-    CHECKM2_DB ()
+    // --checkm2_db reuses a local uniref100.KO.1.dmnd
+    if (params.checkm2_db) {
+        ch_checkm2_db = channel.value(file(params.checkm2_db, checkIfExists: true))
+    } else {
+        CHECKM2_DB ()
+        ch_checkm2_db = CHECKM2_DB.out.db
+    }
 
     //
     // MODULE: Assess assembly completeness with CheckM2
     //
     CHECKM2 (
         ch_assemblies,
-        CHECKM2_DB.out.db
+        ch_checkm2_db
     )
 
     //

@@ -1,7 +1,6 @@
 process REPORT {
     label 'process_low'
-    publishDir "${params.outdir}/report", mode: 'copy'
-    container 'docker.io/python:3.9'
+    container 'ghcr.io/alarawms/staphit2-python:1.0.0'
 
     input:
     path summary_tsv
@@ -11,12 +10,18 @@ process REPORT {
 
     output:
     path "run_report.md", emit: report
+    tuple val("${task.process}"), val('python'), eval("python3 --version | sed 's/Python //'"), topic: versions, emit: versions_python
 
     script:
     def cluster_flag = clusters.name != 'NO_CLUSTERS' ? "--clusters ${clusters}" : ''
     def qc_flag = qc_report.name != 'NO_QC' ? "--qc ${qc_report}" : ''
     def plasmid_flag = plasmid_summary.name != 'NO_PLASMIDS' ? "--plasmids ${plasmid_summary}" : ''
     """
-    python3 ${projectDir}/bin/staphit-report --summary ${summary_tsv} ${cluster_flag} ${qc_flag} ${plasmid_flag} -o run_report.md
+    staphit-report --summary ${summary_tsv} ${cluster_flag} ${qc_flag} ${plasmid_flag} -o run_report.md
+    """
+
+    stub:
+    """
+    touch run_report.md
     """
 }

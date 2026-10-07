@@ -51,13 +51,15 @@ workflow PHYLOGENY {
                 [], [], [], [], [], [], [], [], [], [], [], []
             )
             ch_tree = IQTREE.out.phylogeny
+            ch_versions = ch_versions.mix(IQTREE.out.versions)
         } else {
             FASTTREE ( ch_panaroo_aln )
-            ch_tree = FASTTREE.out
+            ch_tree = FASTTREE.out.tree.map { tree -> [ [id: 'core'], tree ] }
         }
 
         // SNP distances from core genes (for tree visualization)
         SNPDISTS_CORE ( ch_panaroo_aln.map { aln -> [ [id: 'panaroo_core'], aln ] } )
+        ch_versions = ch_versions.mix(SNPDISTS_CORE.out.versions)
     }
 
     //
@@ -74,6 +76,7 @@ workflow PHYLOGENY {
         // SNP distances from whole-genome (for outbreak clustering)
         SNPDISTS_SNIPPY ( SNIPPY_CORE.out.aln.map { aln -> [ [id: 'snippy_wgs'], aln ] } )
         ch_snippy_dists = SNPDISTS_SNIPPY.out.tsv
+        ch_versions = ch_versions.mix(SNPDISTS_SNIPPY.out.versions)
 
         // Optional Bayesian phylodynamics (--use_beast)
         if (params.use_beast) {
@@ -96,11 +99,13 @@ workflow PHYLOGENY {
                     [], [], [], [], [], [], [], [], [], [], [], []
                 )
                 ch_tree = IQTREE.out.phylogeny
+                ch_versions = ch_versions.mix(IQTREE.out.versions)
             } else {
                 FASTTREE ( SNIPPY_CORE.out.aln )
-                ch_tree = FASTTREE.out
+                ch_tree = FASTTREE.out.tree.map { tree -> [ [id: 'core'], tree ] }
             }
             SNPDISTS_CORE ( SNIPPY_CORE.out.aln.map { aln -> [ [id: 'snippy_core'], aln ] } )
+            ch_versions = ch_versions.mix(SNPDISTS_CORE.out.versions)
         }
     }
 

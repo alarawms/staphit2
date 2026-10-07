@@ -19,20 +19,31 @@ The pipeline is built using [Nextflow](https://www.nextflow.io/) and processes d
 
 ## Read QC and preprocessing
 
-### trimgalore/
+### fastp/
 
 <details markdown="1">
 <summary>Output files</summary>
 
-- `trimgalore/`
-  - `*_1.fastq.gz_trimming_report.txt`: Trimming statistics for the forward read file.
-  - `*_2.fastq.gz_trimming_report.txt`: Trimming statistics for the reverse read file.
-  - `*_val_1.fq.gz`: Quality- and adapter-trimmed forward reads.
-  - `*_val_2.fq.gz`: Quality- and adapter-trimmed reverse reads.
+- `fastp/`
+  - `<sample>.fastp.json`: Trimming and filtering statistics (also read by MultiQC).
+  - `<sample>.fastp.html`: Per-sample HTML report.
 
 </details>
 
-[TrimGalore](https://www.bioinformatics.babraham.ac.uk/projects/trim_galore/) performs adapter removal and quality trimming of raw Illumina reads. Trimming reports include the number of reads processed, reads with adapters, and the percentage of bases quality-trimmed. The trimmed FASTQ files are passed to all downstream analysis steps.
+[fastp](https://github.com/OpenGene/fastp) removes adapters (auto-detected for paired-end reads), trims 3' bases below Q20 and drops reads shorter than 20 bp. It runs on short reads of `short` and `hybrid` samples; the trimmed reads go to Rasusa and every short-read step downstream.
+
+### nanoplot/
+
+<details markdown="1">
+<summary>Output files</summary>
+
+- `nanoplot/<sample>/`
+  - `<sample>_NanoStats.txt`: Read count, N50, mean/median length and quality.
+  - `<sample>_NanoPlot-report.html`: Interactive length/quality plots.
+
+</details>
+
+[NanoPlot](https://github.com/wdecoster/NanoPlot) summarises Oxford Nanopore reads of `hybrid` and `long` samples. The stats files are included in the MultiQC report.
 
 ### rasusa/
 
@@ -75,6 +86,19 @@ The pipeline is built using [Nextflow](https://www.nextflow.io/) and processes d
 </details>
 
 [SKESA](https://github.com/ncbi/SKESA) (Strategic K-mer Extension for Scrupulous Assemblies) is the default *de novo* assembler. It is optimized for bacterial genomes and produces conservative, high-quality assemblies. If SPAdes is selected instead, output appears in `spades/` with similar file structure.
+
+### dragonflye/
+
+<details markdown="1">
+<summary>Output files</summary>
+
+- `dragonflye/<sample>/`
+  - `<sample>.dragonflye.log`: Full assembly and polishing log.
+  - `<sample>.gfa`: Flye assembly graph (view in [Bandage](https://rrwick.github.io/Bandage/) to check circular chromosome and plasmids).
+
+</details>
+
+[Dragonflye](https://github.com/rpetit3/dragonflye) assembles `long` and `hybrid` samples with [Flye](https://github.com/fenderglass/Flye), polishes with [Racon](https://github.com/lbcb-sci/racon), then with the Illumina reads for hybrid samples ([Polypolish](https://github.com/rrwick/Polypolish)) or with [Medaka](https://github.com/nanoporetech/medaka) for long-only samples when `--medaka_model` is set. The contigs go into the same downstream steps as short-read assemblies. Samples whose assembly is below 500 kb are dropped before QC.
 
 ### quast/
 
@@ -149,14 +173,27 @@ The QC gate integrates metrics from QUAST and CheckM2 to produce a pass/fail dec
 <details markdown="1">
 <summary>Output files</summary>
 
-- `sccmec/`
-  - `*.tsv`: SCCmec cassette type assignment per sample.
-  - `*.svg` (optional): Visual map of SCCmec element structure (when `--sccmec_viz true`).
-  - `*.html` (optional): Interactive HTML visualization (when `--sccmec_viz true`).
+- `sccmec/<sample>/`
+  - `<sample>_sccmec.tsv`: SCCmec type call.
+  - `<sample>_sccmec.json`: Full typer output (ccr/mec complexes, candidates, scores, contigs).
+  - `<sample>_sccmec_elements.csv`: Every detected element (mec, ccr, IS, orfX) with coordinates.
+  - `<sample>_sccmec_map.svg`, `<sample>_sccmec_report.html` (optional): Element maps (`--sccmec_viz true`).
 
 </details>
 
 The SCCmec typer classifies the staphylococcal cassette chromosome *mec* element, which carries the *mecA*/*mecC* gene conferring methicillin resistance. SCCmec types (I--XIII) provide insight into the evolutionary origin of resistance (hospital-associated vs. community-associated lineages). Enable visual maps with `--sccmec_viz true`.
+
+SCCmec columns in `summary/combined_summary.tsv`:
+
+| Column | Meaning |
+|--------|---------|
+| `sccmec_type` | Typer call as reported (may include `(best-fit)` with `--sccmec_best_fit`) |
+| `sccmec_iwg` | IWG-SCC designation: ccr complex + mec class (e.g. `IV(2B)`, `V(5C2&5)`); composite and tandem elements keep both ccr complexes |
+| `sccmec_group` | Harmonized group used for figure colours |
+| `sccmec_type_candidates` | Other types consistent with the detected elements |
+| `sccmec_assembly_limited` | `true` when the assembly splits the cassette across contigs and the type could not be closed from the assembly alone |
+| `sccmec_typing_mode` | `assembly` or `reads` (the read fallback rescued a split cassette) |
+| `sccmec_cassette` | Ordered elements of the cassette (orfX → mec → ccr) |
 
 ### agr_typing/
 
@@ -375,6 +412,24 @@ python bin/export_itol.py \
 ```
 
 The `--tree` flag is strongly recommended: it uses the treefile as the authoritative source of node IDs, resolves mismatches between metadata keys and tree labels, and automatically excludes the Snippy reference genome node (`Reference`) which would otherwise appear as an unannotated leaf.
+
+---
+
+## Databases
+
+<details markdown="1">
+<summary>Output files</summary>
+
+- `databases/`
+  - `checkm2/uniref100.KO.1.dmnd`: CheckM2 database (reuse with `--checkm2_db`).
+  - `amrfinderplus/amrfinderdb.tar.gz`: AMRFinderPlus database (reuse with `--amrfinder_db`).
+  - `mash_refseq/refseq.genomes.msh`: Mash RefSeq sketch for species QC (reuse with `--mash_db`).
+  - `mob_suite/mob_db/`: MOB-suite databases.
+  - `resfinder/resfinder_db/`: ResFinder FASTA files at commit `--resfinder_db_commit`.
+
+</details>
+
+Database versions or checksums are written to `pipeline_info/staphit2_software_mqc_versions.yml` with the tool versions.
 
 ---
 

@@ -1,0 +1,28 @@
+nextflow_process {
+
+    name "Test ITOL_EXPORT"
+    script "../../../modules/local/itol_export.nf"
+    process "ITOL_EXPORT"
+    tag "itol_export"
+    options "-stub"
+
+    test("tree + summary - stub") {
+        when {
+            params { outdir = "$outputDir" }   // publishDir is the outdir root
+            process {
+                """
+                input[0] = file("${projectDir}/tests/data/stub/core.treefile", checkIfExists: true)
+                input[1] = file("${projectDir}/tests/data/stub/combined_summary.tsv", checkIfExists: true)
+                input[2] = file("${projectDir}/tests/data/stub/clusters.tsv", checkIfExists: true)
+                """
+            }
+        }
+        then {
+            assertAll(
+                { assert process.success },
+                { assert process.out.files.size() == 1 },
+                { assert snapshot(process.out.versions_python).match() }
+            )
+        }
+    }
+}

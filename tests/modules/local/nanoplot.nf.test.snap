@@ -1,0 +1,27 @@
+{
+    "ONT reads - stub": {
+        "content": [
+            [
+                [
+                    {
+                        "id": "L1",
+                        "mode": "long"
+                    },
+                    "L1_NanoStats.txt:md5,d41d8cd98f00b204e9800998ecf8427e"
+                ]
+            ],
+            [
+                [
+                    "NANOPLOT",
+                    "nanoplot",
+                    "1.44.1"
+                ]
+            ]
+        ],
+        "meta": {
+            "nf-test": "0.9.3",
+            "nextflow": "26.04.6"
+        },
+        "timestamp": "2026-10-07T18:07:57.407355962"
+    }
+}

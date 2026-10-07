@@ -185,8 +185,14 @@ workflow STAPHIT2 {
         QC_ASSEMBLY.out.nanoplot_stats.collect { row -> row[1] }
     )
 
-    // Collate and save software versions
+    // Collate and save software versions: versions.yml files plus [process, tool, version] topic tuples
+    ch_topic_versions = channel.topic('versions')
+        .unique()
+        .map { process, tool, version -> [ process.tokenize(':')[-1], "    ${tool}: ${version.toString().trim()}" ] }
+        .groupTuple()
+        .map { process, tools -> "${process}:\n${tools.unique().sort().join('\n')}" }
     softwareVersionsToYAML(ch_versions)
+        .mix(ch_topic_versions)
         .collectFile(
             storeDir: "${params.outdir}/pipeline_info",
             name:  'staphit2_software_mqc_versions.yml',

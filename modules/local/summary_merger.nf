@@ -1,13 +1,13 @@
 process SUMMARY_MERGER {
     label 'process_low'
-    publishDir "${params.outdir}/summary", mode: 'copy'
-    container 'docker.io/python:3.9'
+    container 'ghcr.io/alarawms/staphit2-python:1.0.0'
 
     input:
     path sample_summaries
 
     output:
     path "combined_summary.tsv", emit: summary
+    tuple val("${task.process}"), val('python'), eval("python3 --version | sed 's/Python //'"), topic: versions, emit: versions_python
 
     script:
     """
@@ -15,5 +15,10 @@ process SUMMARY_MERGER {
     for f in *.csv; do
         tail -n +2 "\$f" >> combined_summary.tsv
     done
+    """
+
+    stub:
+    """
+    touch combined_summary.tsv
     """
 }

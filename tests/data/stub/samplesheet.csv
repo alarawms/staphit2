@@ -1,0 +1,4 @@
+sample,fastq_1,fastq_2,long_fastq
+SHORT1,tests/data/stub/short_R1.fastq.gz,tests/data/stub/short_R2.fastq.gz,
+HYBRID1,tests/data/stub/hybrid_R1.fastq.gz,tests/data/stub/hybrid_R2.fastq.gz,tests/data/stub/hybrid_ont.fastq.gz
+LONG1,,,tests/data/stub/long_ont.fastq.gz

@@ -1,13 +1,13 @@
 process PLASMID_SUMMARY {
     label 'process_low'
-    publishDir "${params.outdir}/plasmids", mode: 'copy'
-    container 'docker.io/python:3.9'
+    container 'ghcr.io/alarawms/staphit2-python:1.0.0'
 
     input:
     path mob_dirs
 
     output:
     path "plasmid_summary.tsv", emit: summary
+    tuple val("${task.process}"), val('python'), eval("python3 --version | sed 's/Python //'"), topic: versions, emit: versions_python
 
     script:
     '''
@@ -52,4 +52,9 @@ with open('plasmid_summary.tsv', 'w', newline='') as f:
 print(f"Summarized {len(out_rows)} samples")
 PYEOF
     '''
+
+    stub:
+    """
+    touch plasmid_summary.tsv
+    """
 }
