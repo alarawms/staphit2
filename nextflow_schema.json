@@ -354,6 +354,18 @@
                     "type": "string",
                     "default": "docker.io/alarawms/sccmec_typer:latest",
                     "description": "Container image for SCCmec typing (sccmec_typer); override to test a typer build"
+                },
+                "sccmec_best_fit": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Promote the SCCmec estimator's best candidate when the type is Unknown, labelled 'Type X (est.)'"
+                },
+                "sccmec_min_score": {
+                    "type": "number",
+                    "default": 0.6,
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Minimum estimator score for --sccmec_best_fit promotion"
                 }
             }
         },
@@ -453,6 +465,11 @@
                 "panaroo_entropy_filter": {
                     "type": "number",
                     "description": "BMGE entropy filter (0.0-1.0). Null for auto Tukey method."
+                },
+                "plot_tree": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Draw the annotated tree (PDF + SVG); disable with --plot_tree false"
                 }
             }
         },
