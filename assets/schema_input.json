@@ -11,9 +11,7 @@
                 "type": "string",
                 "pattern": "^\\S+$",
                 "errorMessage": "Sample name must be provided and cannot contain spaces",
-                "meta": [
-                    "id"
-                ]
+                "meta": ["id"]
             },
             "fastq_1": {
                 "type": "string",
@@ -31,25 +29,17 @@
                 "errorMessage": "Long-read (ONT) FastQ cannot contain spaces and must have extension '.fq.gz' or '.fastq.gz'"
             }
         },
-        "required": [
-            "sample"
-        ],
+        "required": ["sample"],
         "anyOf": [
             {
-                "required": [
-                    "fastq_1"
-                ]
+                "required": ["fastq_1"]
             },
             {
-                "required": [
-                    "long_fastq"
-                ]
+                "required": ["long_fastq"]
             }
         ],
         "dependentRequired": {
-            "fastq_2": [
-                "fastq_1"
-            ]
+            "fastq_2": ["fastq_1"]
         }
     }
 }

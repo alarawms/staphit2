@@ -13,7 +13,7 @@ lint:
     - .github/PULL_REQUEST_TEMPLATE.md
     - assets/email_template.txt
     - docs/README.md
-    - .gitignore            # repo-specific ignores (results, work dirs, data) on top of the template
+    - .gitignore # repo-specific ignores (results, work dirs, data) on top of the template
   nextflow_config:
     - manifest.name
     - manifest.homePage

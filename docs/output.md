@@ -85,7 +85,7 @@ The pipeline is built using [Nextflow](https://www.nextflow.io/) and processes d
 
 </details>
 
-[SKESA](https://github.com/ncbi/SKESA) (Strategic K-mer Extension for Scrupulous Assemblies) is the default *de novo* assembler. It is optimized for bacterial genomes and produces conservative, high-quality assemblies. If SPAdes is selected instead, output appears in `spades/` with similar file structure.
+[SKESA](https://github.com/ncbi/SKESA) (Strategic K-mer Extension for Scrupulous Assemblies) is the default _de novo_ assembler. It is optimized for bacterial genomes and produces conservative, high-quality assemblies. If SPAdes is selected instead, output appears in `spades/` with similar file structure.
 
 ### dragonflye/
 
@@ -154,7 +154,7 @@ The QC gate integrates metrics from QUAST and CheckM2 to produce a pass/fail dec
 
 </details>
 
-[mlst](https://github.com/tseemann/mlst) assigns a 7-locus multi-locus sequence type (ST) by scanning assembled contigs against the PubMLST *S. aureus* scheme. The ST is a key epidemiological marker for lineage classification.
+[mlst](https://github.com/tseemann/mlst) assigns a 7-locus multi-locus sequence type (ST) by scanning assembled contigs against the PubMLST _S. aureus_ scheme. The ST is a key epidemiological marker for lineage classification.
 
 ### spatyper/
 
@@ -166,7 +166,7 @@ The QC gate integrates metrics from QUAST and CheckM2 to produce a pass/fail dec
 
 </details>
 
-[spaTyper](https://github.com/HCGB-IGTP/spaTyper) determines the *spa* type based on the short-sequence repeat region of the staphylococcal protein A gene. spa typing provides finer resolution than MLST for outbreak investigations and is the most widely used single-locus typing method for *S. aureus*.
+[spaTyper](https://github.com/HCGB-IGTP/spaTyper) determines the _spa_ type based on the short-sequence repeat region of the staphylococcal protein A gene. spa typing provides finer resolution than MLST for outbreak investigations and is the most widely used single-locus typing method for _S. aureus_.
 
 ### sccmec/
 
@@ -181,19 +181,19 @@ The QC gate integrates metrics from QUAST and CheckM2 to produce a pass/fail dec
 
 </details>
 
-The SCCmec typer classifies the staphylococcal cassette chromosome *mec* element, which carries the *mecA*/*mecC* gene conferring methicillin resistance. SCCmec types (I--XIII) provide insight into the evolutionary origin of resistance (hospital-associated vs. community-associated lineages). Enable visual maps with `--sccmec_viz true`.
+The SCCmec typer classifies the staphylococcal cassette chromosome _mec_ element, which carries the _mecA_/_mecC_ gene conferring methicillin resistance. SCCmec types (I--XIII) provide insight into the evolutionary origin of resistance (hospital-associated vs. community-associated lineages). Enable visual maps with `--sccmec_viz true`.
 
 SCCmec columns in `summary/combined_summary.tsv`:
 
-| Column | Meaning |
-|--------|---------|
-| `sccmec_type` | Typer call as reported (may include `(best-fit)` with `--sccmec_best_fit`) |
-| `sccmec_iwg` | IWG-SCC designation: ccr complex + mec class (e.g. `IV(2B)`, `V(5C2&5)`); composite and tandem elements keep both ccr complexes |
-| `sccmec_group` | Harmonized group used for figure colours |
-| `sccmec_type_candidates` | Other types consistent with the detected elements |
-| `sccmec_assembly_limited` | `true` when the assembly splits the cassette across contigs and the type could not be closed from the assembly alone |
-| `sccmec_typing_mode` | `assembly` or `reads` (the read fallback rescued a split cassette) |
-| `sccmec_cassette` | Ordered elements of the cassette (orfX → mec → ccr) |
+| Column                    | Meaning                                                                                                                         |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `sccmec_type`             | Typer call as reported (may include `(best-fit)` with `--sccmec_best_fit`)                                                      |
+| `sccmec_iwg`              | IWG-SCC designation: ccr complex + mec class (e.g. `IV(2B)`, `V(5C2&5)`); composite and tandem elements keep both ccr complexes |
+| `sccmec_group`            | Harmonized group used for figure colours                                                                                        |
+| `sccmec_type_candidates`  | Other types consistent with the detected elements                                                                               |
+| `sccmec_assembly_limited` | `true` when the assembly splits the cassette across contigs and the type could not be closed from the assembly alone            |
+| `sccmec_typing_mode`      | `assembly` or `reads` (the read fallback rescued a split cassette)                                                              |
+| `sccmec_cassette`         | Ordered elements of the cassette (orfX → mec → ccr)                                                                             |
 
 ### agr_typing/
 
@@ -205,7 +205,7 @@ SCCmec columns in `summary/combined_summary.tsv`:
 
 </details>
 
-The accessory gene regulator (*agr*) system controls quorum-sensing and virulence factor expression. The agr group (I through IV) correlates with the spectrum of secreted toxins and has been associated with clinical outcomes.
+The accessory gene regulator (_agr_) system controls quorum-sensing and virulence factor expression. The agr group (I through IV) correlates with the spectrum of secreted toxins and has been associated with clinical outcomes.
 
 ### mash/
 
@@ -217,7 +217,7 @@ The accessory gene regulator (*agr*) system controls quorum-sensing and virulenc
 
 </details>
 
-[Mash](https://github.com/marbl/Mash) provides rapid species confirmation by computing MinHash-based genomic distances against a reference database. Samples with unexpectedly large distances to *S. aureus* references may indicate contamination or mis-labelled isolates.
+[Mash](https://github.com/marbl/Mash) provides rapid species confirmation by computing MinHash-based genomic distances against a reference database. Samples with unexpectedly large distances to _S. aureus_ references may indicate contamination or mis-labelled isolates.
 
 ---
 
@@ -233,7 +233,7 @@ The accessory gene regulator (*agr*) system controls quorum-sensing and virulenc
 
 </details>
 
-[AMRFinderPlus](https://github.com/ncbi/amr) identifies acquired AMR genes, stress response genes, and chromosomal point mutations from assembled contigs. When run with the `--organism Staphylococcus_aureus` flag (set automatically by the pipeline), it additionally reports clinically relevant point mutations in genes such as *gyrA*, *parC* (fluoroquinolone resistance), *rpoB* (rifampicin resistance), and *fusA* (fusidic acid resistance). Rows with `Subtype=POINT` in the output indicate point mutations rather than acquired genes.
+[AMRFinderPlus](https://github.com/ncbi/amr) identifies acquired AMR genes, stress response genes, and chromosomal point mutations from assembled contigs. When run with the `--organism Staphylococcus_aureus` flag (set automatically by the pipeline), it additionally reports clinically relevant point mutations in genes such as _gyrA_, _parC_ (fluoroquinolone resistance), _rpoB_ (rifampicin resistance), and _fusA_ (fusidic acid resistance). Rows with `Subtype=POINT` in the output indicate point mutations rather than acquired genes.
 
 ### abricate/
 
@@ -369,9 +369,9 @@ When `--tree_builder fasttree` is selected, output appears in `fasttree/` contai
 - `itol/`
   - `01_sccmec.txt`: SCCmec type — colour strip.
   - `02_mlst.txt`: MLST sequence type — colour strip.
-  - `03_agr.txt`: *agr* group (I–IV) — colour strip.
+  - `03_agr.txt`: _agr_ group (I–IV) — colour strip.
   - `04_pvl.txt`: PVL status (positive/negative) — binary symbol.
-  - `05_spa.txt`: *spa* type label — text dataset.
+  - `05_spa.txt`: _spa_ type label — text dataset.
   - `06_st_label.txt`: ST label — text dataset.
   - `07_amr_class.txt`: AMR drug-class presence — binary dataset.
   - `08_virulence.txt`: Selected virulence genes — binary dataset.
@@ -392,11 +392,11 @@ The iTOL annotation export (`bin/export_itol.py`) generates ready-to-upload anno
 
 The script draws annotation data from three sources, checked in priority order:
 
-| Source | Contents | Applies to |
-|--------|----------|-----------|
+| Source                                 | Contents                                                              | Applies to                 |
+| -------------------------------------- | --------------------------------------------------------------------- | -------------------------- |
 | `results/summary/combined_summary.tsv` | Pipeline typing output (ST, SCCmec, spa, agr, AMR, virulence, origin) | All samples that passed QC |
-| `--pub_meta` TSV | Manually curated public metadata (country, year, ST, spa) | Public ENA/SRA accessions |
-| `--local_meta` CSV | Local cohort metadata (hospital, city, region, gender, patient type) | Local sequenced samples |
+| `--pub_meta` TSV                       | Manually curated public metadata (country, year, ST, spa)             | Public ENA/SRA accessions  |
+| `--local_meta` CSV                     | Local cohort metadata (hospital, city, region, gender, patient type)  | Local sequenced samples    |
 
 Only tracks with at least one data value are written to disk. Tracks whose data is entirely absent (e.g. hospital for a public-data-only tree) produce no file.
 
@@ -480,13 +480,13 @@ A single wide-format table with one row per sample and columns for every typing 
 
 </details>
 
-The clustering module (`bin/staphit-cluster`) applies single-linkage clustering to the SNP distance matrix at three configurable thresholds (default: 5, 15, and 40 SNPs for *S. aureus*):
+The clustering module (`bin/staphit-cluster`) applies single-linkage clustering to the SNP distance matrix at three configurable thresholds (default: 5, 15, and 40 SNPs for _S. aureus_):
 
-| Tier | Default SNP threshold | Interpretation |
-|------|----------------------|----------------|
-| Tier 1 | <=5 SNPs | Direct/recent transmission |
-| Tier 2 | <=15 SNPs | Part of the same outbreak |
-| Tier 3 | <=40 SNPs | Epidemiologically related |
+| Tier   | Default SNP threshold | Interpretation             |
+| ------ | --------------------- | -------------------------- |
+| Tier 1 | <=5 SNPs              | Direct/recent transmission |
+| Tier 2 | <=15 SNPs             | Part of the same outbreak  |
+| Tier 3 | <=40 SNPs             | Epidemiologically related  |
 
 When metadata is provided, cluster reports are annotated with epidemiological context (collection dates, locations, infection origin).
 

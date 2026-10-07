@@ -50,6 +50,7 @@ staphit2/
 ```
 
 The species descriptor (`species/s_aureus.yml`) declares:
+
 - Genome size, GC range, assembly thresholds
 - Which typing tools to activate
 - Virulence gene sets and interpretation rules
@@ -58,7 +59,7 @@ The species descriptor (`species/s_aureus.yml`) declares:
 - Reference genome
 - Vitek card definitions
 
-For v2, only *S. aureus* is implemented. But the structure ensures adding *E. coli* or *K. pneumoniae* later is **additive** — new files in `subworkflows/local/species/` and `species/`, zero changes to the core.
+For v2, only _S. aureus_ is implemented. But the structure ensures adding _E. coli_ or _K. pneumoniae_ later is **additive** — new files in `subworkflows/local/species/` and `species/`, zero changes to the core.
 
 ---
 
@@ -78,7 +79,7 @@ For v2, only *S. aureus* is implemented. But the structure ensures adding *E. co
 
 #### Step 1.2: Bundled test dataset
 
-- Create 5 synthetic *S. aureus* read sets (subsample from real data or simulate)
+- Create 5 synthetic _S. aureus_ read sets (subsample from real data or simulate)
 - Include: samplesheet, sample_metadata.csv, antibiogram.csv
 - Store in `assets/test-data/` (small enough for GitHub) or nf-core/test-datasets
 - `-profile test,docker` should complete in <10 minutes
@@ -125,6 +126,7 @@ staphit-fetch download search_results.tsv \
 ```
 
 Functions:
+
 - `search()` — queries NCBI Entrez with organism + filters, returns accession list with BioSample metadata
 - `preview()` — shows metadata completeness stats
 - `download()` — fetches reads (fasterq-dump or fetchngs), maps BioSample attributes to PHA4GE fields
@@ -217,6 +219,7 @@ subworkflows/local/species/s_aureus/typing.nf
 Wires: MLST + SPATYPER + SCCMEC + AGR_TYPING (+ optional CHEWBBACA for cgMLST)
 
 Local modules:
+
 ```
 modules/local/spatyper.nf
 modules/local/sccmec.nf
@@ -302,6 +305,7 @@ subworkflows/local/core/plasmids.nf
 Wires: MOB_RECON → PLASMID_SUMMARY
 
 Local modules:
+
 ```
 modules/local/mob_recon.nf
 modules/local/plasmid_summary.nf
@@ -369,6 +373,7 @@ All use `bin/staphit-*` scripts as thin wrappers.
 #### Step 10.2: SQLite backend (new in v2)
 
 Create `bin/staphit-db`:
+
 - `staphit-db init` — creates schema
 - `staphit-db import results/` — loads pipeline output
 - `staphit-db query "SELECT ..."` — SQL access
@@ -416,6 +421,7 @@ Use frontend design best practices for the Clinical Intelligence theme.
 #### Step 12.1: Migrate staphit-watch
 
 Already in `bin/` from Step 1.3. Add integration with SQLite:
+
 - New clusters detected by querying DB instead of comparing flat files
 - Notification includes cluster details from SQL query
 
@@ -434,6 +440,7 @@ Already in `bin/` from Step 1.3. Add integration with SQLite:
 #### Step 13.1: nf-test for all local modules
 
 Priority order (most bug-prone first from v1 experience):
+
 1. checkm2 (DB path, symlinks, name collisions)
 2. mob_recon (empty output, name collisions)
 3. iqtree (seed tree flag)
@@ -443,6 +450,7 @@ Priority order (most bug-prone first from v1 experience):
 #### Step 13.2: GitHub Actions
 
 Enable from nf-core template:
+
 - `ci.yml` — lint + pytest + `nextflow run -profile test`
 - `linting.yml` — nf-core lint
 - Push to dev → CI → green badge
@@ -472,22 +480,22 @@ Enable from nf-core template:
 
 ## Execution order
 
-| Phase | What | Depends on | Effort |
-|-------|------|-----------|--------|
-| 1 | Foundation (scaffold, test data, copy scripts) | Nothing | 3 days |
-| 2 | Data acquisition (staphit-fetch) | Phase 1 | 3 days |
-| 3 | Input preparation (metadata tools) | Phase 1 | 1 day |
-| 4 | QC & Assembly | Phase 1 | 2 days |
-| 5 | Typing | Phase 4 | 2 days |
-| 6 | Resistance | Phase 4 | 2 days |
-| 7 | Virulence | Phase 6 | 1 day |
-| 8 | Plasmids | Phase 4 | 1 day |
-| 9 | Phylogeny & clustering | Phase 4 | 2 days |
-| 10 | Reporting & SQLite | Phase 5-9 | 3 days |
-| 11 | Dashboard | Phase 10 | 3 days |
-| 12 | Surveillance | Phase 10 | 1 day |
-| 13 | Testing & CI | Phase 4+ | 3 days (parallel) |
-| 14 | Release | All | 1 day |
+| Phase | What                                           | Depends on | Effort            |
+| ----- | ---------------------------------------------- | ---------- | ----------------- |
+| 1     | Foundation (scaffold, test data, copy scripts) | Nothing    | 3 days            |
+| 2     | Data acquisition (staphit-fetch)               | Phase 1    | 3 days            |
+| 3     | Input preparation (metadata tools)             | Phase 1    | 1 day             |
+| 4     | QC & Assembly                                  | Phase 1    | 2 days            |
+| 5     | Typing                                         | Phase 4    | 2 days            |
+| 6     | Resistance                                     | Phase 4    | 2 days            |
+| 7     | Virulence                                      | Phase 6    | 1 day             |
+| 8     | Plasmids                                       | Phase 4    | 1 day             |
+| 9     | Phylogeny & clustering                         | Phase 4    | 2 days            |
+| 10    | Reporting & SQLite                             | Phase 5-9  | 3 days            |
+| 11    | Dashboard                                      | Phase 10   | 3 days            |
+| 12    | Surveillance                                   | Phase 10   | 1 day             |
+| 13    | Testing & CI                                   | Phase 4+   | 3 days (parallel) |
+| 14    | Release                                        | All        | 1 day             |
 
 **Critical path:** Phase 1 → 4 → 5/6/7/8 (parallel) → 9 → 10 → 14
 
@@ -497,7 +505,7 @@ Enable from nf-core template:
 
 ## Multi-species scaffold summary
 
-When ready to add *E. coli*:
+When ready to add _E. coli_:
 
 1. Create `species/e_coli.yml` — genome size, thresholds, typing tools
 2. Create `subworkflows/local/species/e_coli/typing.nf` — serotype, phylogroup
@@ -506,4 +514,4 @@ When ready to add *E. coli*:
 5. Add Vitek card `AST-N395.yml` to `bin/staphit-metadata`
 6. Zero changes to core subworkflows
 
-The species descriptor pattern means the **framework is already built** — it's just serving *S. aureus* first.
+The species descriptor pattern means the **framework is already built** — it's just serving _S. aureus_ first.
