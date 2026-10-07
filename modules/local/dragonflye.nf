@@ -1,7 +1,10 @@
 process DRAGONFLYE {
     tag "$meta.id"
     label 'process_high'
-    container 'docker.io/staphb/dragonflye:1.2.1'
+    // BioContainers image: works without an entrypoint (Singularity); the staphb image needs its micromamba entrypoint
+    container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
+        'https://depot.galaxyproject.org/singularity/dragonflye:1.2.1--hdfd78af_0' :
+        'quay.io/biocontainers/dragonflye:1.2.1--hdfd78af_0' }"
 
     input:
     tuple val(meta), path(long_reads), path(short_reads)   // short_reads = [] for long-only

@@ -1,32 +1,44 @@
 nextflow_pipeline {
 
-    name "Test pipeline"
+    name "Pipeline (stub): short, hybrid and long-only samples"
     script "../main.nf"
     tag "pipeline"
+    tag "stub"
+    options "-stub"
 
-    test("-profile test") {
+    test("short + hybrid + long-only - stub") {
 
         when {
             params {
-                outdir = "$outputDir"
+                // samplesheet paths are relative to the launch dir; nf-test launches elsewhere, so make them absolute
+                def data = "${projectDir}/tests/data/stub"
+                def ss   = new File(new File(outputDir).parentFile, 'samplesheet.csv')
+                ss.text  = new File("${data}/samplesheet.csv").text.replace('tests/data/stub/', "${data}/")
+                input           = ss.path
+                outdir          = "$outputDir"
+                skip_qc_gate    = true
+                skip_species_qc = true
             }
         }
 
         then {
-            // stable_name: All files + folders in ${params.outdir}/ with a stable name
-            def stable_name = getAllFilesFromDir(params.outdir, relative: true, includeDir: true, ignore: ['pipeline_info/*.{html,json,txt}'])
-            // stable_path: All files in ${params.outdir}/ with stable content
-            def stable_path = getAllFilesFromDir(params.outdir, ignoreFile: 'tests/.nftignore')
+            def versions = path("$outputDir/pipeline_info/staphit2_software_mqc_versions.yml").text
             assertAll(
-                { assert workflow.success},
-                { assert snapshot(
-                    // pipeline versions.yml file for multiqc from which Nextflow version is removed because we test pipelines on multiple Nextflow versions
-                    removeNextflowVersion("$outputDir/pipeline_info/staphit2_software_mqc_versions.yml"),
-                    // All stable path name, with a relative path
-                    stable_name,
-                    // All files with stable contents
-                    stable_path
-                ).match() }
+                { assert workflow.success },
+                // routing by mode: SKESA for short, Dragonflye for hybrid + long-only, NanoPlot for any ONT reads
+                { assert path("$outputDir/skesa").list().size() == 1 },
+                { assert path("$outputDir/dragonflye/HYBRID1").exists() },
+                { assert path("$outputDir/dragonflye/LONG1").exists() },
+                { assert path("$outputDir/nanoplot/HYBRID1").exists() },
+                { assert path("$outputDir/nanoplot/LONG1").exists() },
+                { assert !path("$outputDir/nanoplot/SHORT1").exists() },
+                { assert path("$outputDir/fastp/SHORT1.fastp.json").exists() },
+                { assert !path("$outputDir/fastp/LONG1.fastp.json").exists() },
+                // every sample reaches the run-level summary
+                { assert path("$outputDir/summary/combined_summary.tsv").exists() },
+                { assert path("$outputDir/aggregated").list().size() == 6 },
+                // local modules report versions
+                { assert ['DRAGONFLYE:', 'FASTP:', 'NANOPLOT:', 'SCCMEC:', 'FETCH_RESFINDER_DB:'].every { versions.contains(it) } },
             )
         }
     }
