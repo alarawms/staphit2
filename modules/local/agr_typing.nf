@@ -2,7 +2,7 @@ process AGR_TYPING {
     tag "$meta.id"
     label 'process_low'
     container 'docker.io/alarawms/staph_agr_typer@sha256:49f5a4177b8f91656a4a900d8d12d43148da40874dd8b604aaaeb9db7f533e6d'
-    containerOptions '--entrypoint ""'
+    containerOptions { workflow.containerEngine in ['docker', 'podman'] ? '--entrypoint ""' : '' }   // Docker-only flag; Apptainer rejects it
 
     input:
     tuple val(meta), path(assembly)

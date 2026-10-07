@@ -2,7 +2,7 @@ process SCCMEC {
     tag "$meta.id"
     label 'process_low'
     container "${params.sccmec_container}"
-    containerOptions '--entrypoint ""'
+    containerOptions { workflow.containerEngine in ['docker', 'podman'] ? '--entrypoint ""' : '' }   // Docker-only flag; Apptainer rejects it
 
     input:
     tuple val(meta), path(assembly), path(reads, stageAs: 'reads/*')
