@@ -1,12 +1,12 @@
 process SCCMEC {
     tag "$meta.id"
     label 'process_low'
-    container 'docker.io/alarawms/sccmec_typer:latest'
+    container "${params.sccmec_container}"
     containerOptions '--entrypoint ""'
-    publishDir "${params.outdir}/sccmec/${meta.id}", mode: 'copy'
+    publishDir path: { "${params.outdir}/sccmec/${meta.id}" }, mode: 'copy'
 
     input:
-    tuple val(meta), path(assembly)
+    tuple val(meta), path(assembly), path(reads, stageAs: 'reads/*')
 
     output:
     tuple val(meta), path("${meta.id}_sccmec.tsv")              , emit: report
@@ -18,12 +18,16 @@ process SCCMEC {
     script:
     def viz_flag      = params.sccmec_viz      ? ''                                                   : '--no-viz'
     def bestfit_flag  = params.sccmec_best_fit ? "--best-fit --min-estimate-score ${params.sccmec_min_score}" : ''
+    // read fallback when the assembly splits the cassette (assembly_limited)
+    def rl            = reads instanceof List ? reads : [ reads ]
+    def fallback_flag = rl.size() >= 2 ? "--fallback-1 ${rl[0]} --fallback-2 ${rl[1]}"
+                      : rl.size() == 1 ? "--fallback-1 ${rl[0]}" : ''
     """
     python3 /app/bin/sccmec_typer.py \\
         --1 ${assembly} \\
         -d /app/db/sccmec_targets.fasta \\
         -o ${meta.id}_sccmec \\
         --threads ${task.cpus} \\
-        ${viz_flag} ${bestfit_flag}
+        ${viz_flag} ${bestfit_flag} ${fallback_flag}
     """
 }

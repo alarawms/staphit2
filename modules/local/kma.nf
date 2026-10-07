@@ -55,8 +55,9 @@ process KMA {
     tuple val(meta), path("*.res"), emit: results
 
     script:
+    def nano = meta.mode == 'long' ? '-bcNano' : ''   // long-only samples get raw ONT reads
     """
-    kma -i ${reads[0]} ${reads[1]} -o ${meta.id} -t_db indexed_db/resfinder -1t1 || true
+    kma -i ${[reads].flatten().join(' ')} -o ${meta.id} -t_db indexed_db/resfinder -1t1 ${nano} || true
     touch ${meta.id}.res
     """
 }

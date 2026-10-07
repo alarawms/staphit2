@@ -2,12 +2,16 @@
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     QC & ASSEMBLY SUBWORKFLOW
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    Reads -> Trim -> FastQC -> Assemble (SPAdes + SKESA) -> QUAST -> CheckM2 -> QC Gate
+    Read mode is auto-detected per sample (meta.mode):
+      short  : fastp -> Rasusa -> FastQC -> SKESA/SPAdes
+      hybrid : short-read QC as above + NanoPlot -> Dragonflye (Flye + Polypolish)
+      long   : NanoPlot -> Dragonflye (Flye + Racon[/Medaka])
+    All assemblies -> QUAST -> CheckM2 -> QC Gate
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
 
 include { FASTQC                } from '../../../modules/nf-core/fastqc/main'
-include { TRIMGALORE            } from '../../../modules/nf-core/trimgalore/main'
+include { FASTP                 } from '../../../modules/local/fastp'
 include { RASUSA                } from '../../../modules/nf-core/rasusa/main'
 include { SPADES                } from '../../../modules/nf-core/spades/main'
 include { QUAST                 } from '../../../modules/nf-core/quast/main'
@@ -15,57 +19,64 @@ include { SKESA                 } from '../../../modules/local/skesa'
 include { CHECKM2_DB            } from '../../../modules/local/checkm2_db'
 include { CHECKM2               } from '../../../modules/local/checkm2'
 include { QC_GATE               } from '../../../modules/local/qc_gate'
+include { NANOPLOT              } from '../../../modules/local/nanoplot'
+include { DRAGONFLYE            } from '../../../modules/local/dragonflye'
 
 workflow QC_ASSEMBLY {
 
     take:
-    ch_reads  // channel: [ val(meta), [ path(reads) ] ]
+    ch_reads  // channel: [ val(meta), [ short reads ], [ long reads ] ] — meta.mode: short | hybrid | long
 
     main:
 
     ch_versions = Channel.empty()
 
-    //
-    // MODULE: Trim reads with Trim Galore
-    //
-    TRIMGALORE ( ch_reads )
-    ch_trim_log = TRIMGALORE.out.log
-    // ch_versions = ch_versions.mix(TRIMGALORE.out.versions.first()) // uses topic channels
+    // ── Short reads (short + hybrid samples): trim → subsample → FastQC ─────
+    ch_short = ch_reads.filter { meta, sr, lr -> sr }.map { meta, sr, lr -> [ meta, sr ] }
 
-    //
-    // MODULE: Subsample reads to target coverage with Rasusa
-    // S. aureus genome ~2.8 Mb, target 100x
-    //
-    ch_rasusa_input = TRIMGALORE.out.reads.map { meta, reads ->
+    FASTP ( ch_short )
+    ch_trim_log = FASTP.out.json
+
+    ch_rasusa_input = FASTP.out.reads.map { meta, reads ->
         [ meta, reads, params.genome_size ?: 2800000 ]
     }
     RASUSA ( ch_rasusa_input, params.target_depth ?: 100 )
     ch_trimmed = RASUSA.out.reads
 
-    //
-    // MODULE: FastQC on subsampled reads
-    //
     FASTQC ( ch_trimmed )
-    // ch_versions = ch_versions.mix(FASTQC.out.versions.first()) // uses topic channels
 
-    //
-    // MODULE: Assemble with selected assembler (--assembler skesa|spades)
-    //
+    // ── Long reads (long + hybrid samples): NanoPlot QC ─────────────────────
+    ch_long = ch_reads.filter { meta, sr, lr -> lr }.map { meta, sr, lr -> [ meta, lr ] }
+    NANOPLOT ( ch_long )
+
+    // ── Assembly, routed by mode ────────────────────────────────────────────
+    ch_trimmed_short_only = ch_trimmed.filter { meta, reads -> meta.mode == 'short' }
+
     if (params.assembler == 'spades') {
         SPADES (
-            ch_trimmed.map { meta, reads -> [ meta, reads, [], [] ] },
+            ch_trimmed_short_only.map { meta, reads -> [ meta, reads, [], [] ] },
             [],
             []
         )
-        ch_primary_scaffolds = SPADES.out.scaffolds
+        ch_short_scaffolds = SPADES.out.scaffolds
     } else {
-        SKESA ( ch_trimmed )
-        ch_primary_scaffolds = SKESA.out.scaffolds
+        SKESA ( ch_trimmed_short_only )
+        ch_short_scaffolds = SKESA.out.scaffolds
     }
 
-    //
-    // Filter out junk assemblies (S. aureus ~2.8 Mb; anything under 500 KB is junk)
-    //
+    // Long-only: Flye; hybrid: Flye + Polypolish with the trimmed short reads
+    ch_dragonflye_in = ch_long.filter { meta, lr -> meta.mode == 'long' }
+        .map { meta, lr -> [ meta, lr, [] ] }
+        .mix(
+            ch_long.filter { meta, lr -> meta.mode == 'hybrid' }
+                .map { meta, lr -> [ meta.id, meta, lr ] }
+                .join(ch_trimmed.map { meta, sr -> [ meta.id, sr ] })
+                .map { id, meta, lr, sr -> [ meta, lr, sr ] }
+        )
+    DRAGONFLYE ( ch_dragonflye_in )
+
+    ch_primary_scaffolds = ch_short_scaffolds.mix(DRAGONFLYE.out.scaffolds)
+
     ch_skesa_branched = ch_primary_scaffolds.branch {
         meta, fasta ->
             pass: fasta.size() > 500000
@@ -130,8 +141,10 @@ workflow QC_ASSEMBLY {
     }
 
     emit:
-    trimmed_reads     = ch_trimmed              // channel: [ val(meta), [ path(reads) ] ]
-    trim_log          = ch_trim_log             // channel: [ val(meta), path(log) ]
+    trimmed_reads     = ch_trimmed              // channel: [ val(meta), [ path(reads) ] ]  — short + hybrid only
+    long_reads        = ch_long                 // channel: [ val(meta), path(long fastq) ]  — long + hybrid only
+    nanoplot_stats    = NANOPLOT.out.stats      // channel: [ val(meta), path(NanoStats.txt) ]
+    trim_log          = ch_trim_log             // channel: [ val(meta), path(fastp.json) ]
     fastqc_zip        = FASTQC.out.zip          // channel: [ val(meta), path(zip) ]
     fastqc_html       = FASTQC.out.html         // channel: [ val(meta), path(html) ]
     assemblies        = ch_assemblies           // channel: [ val(meta), path(scaffolds) ]  — all assemblies

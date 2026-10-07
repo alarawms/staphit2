@@ -16,6 +16,7 @@ workflow SA_TYPING {
 
     take:
     ch_assemblies  // channel: [ val(meta), path(assembly) ]
+    ch_reads       // channel: [ val(meta), path(reads) ] — SCCmec read fallback (may be empty)
 
     main:
 
@@ -25,7 +26,14 @@ workflow SA_TYPING {
     ch_versions = ch_versions.mix(MLST.out.versions.first())
 
     SPATYPER ( ch_assemblies )
-    SCCMEC ( ch_assemblies )
+    // SCCmec: assembly + the sample's reads (re-typed from reads when the assembly
+    // splits the cassette); samples without reads get an empty list
+    ch_sccmec_in = ch_assemblies.map { meta, fasta -> [ meta.id, meta, fasta ] }
+        .join(ch_reads.map { meta, reads -> [ meta.id, reads ] }, remainder: true)
+        // remainder gives [id, meta, fasta, null] (no reads) or [id, null, reads] (no assembly)
+        .filter { row -> row[1] != null }
+        .map { row -> [ row[1], row[2], (row.size() > 3 && row[3]) ? row[3] : [] ] }
+    SCCMEC ( ch_sccmec_in )
     AGR_TYPING ( ch_assemblies )
     MASH ( ch_assemblies )
 

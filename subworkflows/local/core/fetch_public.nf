@@ -14,7 +14,7 @@ workflow FETCH_PUBLIC {
     SRA_FETCH ( ch_accessions )
 
     ch_reads = SRA_FETCH.out.reads
-        .map { acc, reads -> [ [id: acc, single_end: false], reads ] }
+        .map { acc, reads -> [ [id: acc, single_end: false, mode: 'short'], reads, [] ] }
 
     emit:
     reads    = ch_reads

@@ -87,22 +87,23 @@ workflow PIPELINE_INITIALISATION {
     channel
         .fromList(samplesheetToList(params.input, "${projectDir}/assets/schema_input.json"))
         .map {
-            meta, fastq_1, fastq_2 ->
-                if (!fastq_2) {
-                    return [ meta.id, meta + [ single_end:true ], [ fastq_1 ] ]
-                } else {
-                    return [ meta.id, meta + [ single_end:false ], [ fastq_1, fastq_2 ] ]
-                }
+            meta, fastq_1, fastq_2, long_fastq ->
+                // Auto-detect read mode from which columns are filled
+                // Paths are plain strings in the schema (nf-schema's file-path format does
+                // 3 network round-trips per remote URL); convert to files here instead
+                // Local files must exist; remote URLs are not checked (no network round-trip)
+                def short_reads = [ fastq_1, fastq_2 ].findAll { it }
+                    .collect { p -> p =~ /^\w+:\/\// ? file(p) : file(p, checkIfExists: true) }
+                def long_reads  = [ long_fastq ].findAll { it }
+                    .collect { p -> p =~ /^\w+:\/\// ? file(p) : file(p, checkIfExists: true) }
+                def mode = short_reads && long_reads ? 'hybrid' : (long_reads ? 'long' : 'short')
+                return [ meta.id, meta + [ single_end: short_reads.size() == 1, mode: mode ], short_reads, long_reads ]
         }
         .groupTuple()
         .map { samplesheet ->
             validateInputSamplesheet(samplesheet)
         }
-        .map {
-            meta, fastqs ->
-                return [ meta, fastqs.flatten() ]
-        }
-        .set { ch_samplesheet }
+        .set { ch_samplesheet }  // [ meta, [short fastqs], [long fastq] ]
 
     emit:
     samplesheet = ch_samplesheet
@@ -173,15 +174,14 @@ def validateInputParameters() {
 // Validate channels from input samplesheet
 //
 def validateInputSamplesheet(input) {
-    def (metas, fastqs) = input[1..2]
+    def (metas, short_reads, long_reads) = input[1..3]
 
-    // Check that multiple runs of the same sample are of the same datatype i.e. single-end / paired-end
-    def endedness_ok = metas.collect{ meta -> meta.single_end }.unique().size == 1
-    if (!endedness_ok) {
-        error("Please check input samplesheet -> Multiple runs of a sample must be of the same datatype i.e. single-end or paired-end: ${metas[0].id}")
+    // One row per sample: downstream tools take a single R1/R2 pair and a single long-read file
+    if (metas.size() > 1) {
+        error("Please check input samplesheet -> sample '${metas[0].id}' appears ${metas.size()} times; put short and long reads of a sample on one row (fastq_1, fastq_2, long_fastq)")
     }
 
-    return [ metas[0], fastqs ]
+    return [ metas[0], short_reads[0], long_reads[0] ]
 }
 //
 // Get attribute from genome config file e.g. fasta

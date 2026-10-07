@@ -27,7 +27,7 @@ process AGGREGATOR {
     script:
     def trim_file = trim_log instanceof List ? trim_log[0] : trim_log
     """
-    # v2: TrimGalore parser fix
+    # v7: sccmec typing mode + cassette columns; v6: typer mec-locus proximity; v5: sccmec IWG columns; v4: harmonized year/host/source/sccmec_group columns; v3: fastp parser + metadata summary columns (bump to force re-aggregation after bin/staphit-aggregate changes)
     python3 ${projectDir}/bin/staphit-aggregate \
         --sample-id ${meta.id} \
         --trim-log ${trim_file} \
