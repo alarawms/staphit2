@@ -19,10 +19,10 @@ workflow SPECIES_QC {
 
     main:
 
-    ch_versions = Channel.empty()
+    ch_versions = channel.empty()
 
     // Reference for fastANI (wrapped in tuple for nf-core module)
-    ch_reference = Channel.of([ [id: 'NCTC8325'], file("${projectDir}/assets/references/NCTC8325.fasta") ])
+    ch_reference = channel.of([ [id: 'NCTC8325'], file("${projectDir}/assets/references/NCTC8325.fasta") ])
 
     //
     // MODULE: Run fastANI — each assembly vs NCTC 8325
@@ -48,33 +48,33 @@ workflow SPECIES_QC {
         }
 
     ch_ani_branched = ch_ani_parsed.branch {
-        meta, ani ->
+        _meta, ani ->
             pass: ani >= params.species_ani_threshold
             fail: true
     }
 
     // Get confirmed sample IDs as a set for filtering
     ch_confirmed_ids = ch_ani_branched.pass
-        .map { meta, ani -> meta.id }
+        .map { meta, _ani -> meta.id }
         .collect()
-        .map { it.toSet() }
+        .map { ids -> ids.toSet() }
 
     ch_confirmed_assemblies = ch_assemblies
         .combine(ch_confirmed_ids)
-        .filter { meta, fasta, confirmed_set -> meta.id in confirmed_set }
-        .map { meta, fasta, confirmed_set -> [ meta, fasta ] }
+        .filter { meta, _fasta, confirmed_set -> meta.id in confirmed_set }
+        .map { meta, fasta, _confirmed_set -> [ meta, fasta ] }
 
     ch_rejected_assemblies = ch_assemblies
         .combine(ch_confirmed_ids)
-        .filter { meta, fasta, confirmed_set -> !(meta.id in confirmed_set) }
-        .map { meta, fasta, confirmed_set -> [ meta, fasta ] }
+        .filter { meta, _fasta, confirmed_set -> !(meta.id in confirmed_set) }
+        .map { meta, fasta, _confirmed_set -> [ meta, fasta ] }
 
     //
     // MODULE: Download Mash RefSeq sketch (once, cached)
     //
     // --mash_db reuses a local sketch (the download host is not always reachable from containers)
     if (params.mash_db) {
-        ch_mash_raw = Channel.value(file(params.mash_db, checkIfExists: true))
+        ch_mash_raw = channel.value(file(params.mash_db, checkIfExists: true))
     } else {
         MASH_REFSEQ_DB ()
         ch_mash_raw = MASH_REFSEQ_DB.out.db
@@ -103,8 +103,8 @@ workflow SPECIES_QC {
     // Keep only each rejected sample's best Mash hit, prefixed with its sample ID
     ch_mash_collected = MASH_SCREEN.out.screen
         .map { meta, screen ->
-            def best = screen.text.readLines().findAll { it.trim() }
-                .max { it.split('\t')[0] as Double }
+            def best = screen.text.readLines().findAll { l -> l.trim() }
+                .max { l -> l.split('\t')[0] as Double }
             best ? "${meta.id}\t${best}\n" : ''
         }
         .collectFile(name: 'mash_screen_all.tsv')

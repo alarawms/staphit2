@@ -46,8 +46,8 @@ workflow STAPHIT2 {
 
     main:
 
-    ch_versions      = Channel.empty()
-    ch_multiqc_files = Channel.empty()
+    ch_versions      = channel.empty()
+    ch_multiqc_files = channel.empty()
 
     // ── Phase 1: QC & Assembly ──────────────────────────────────────────────
     QC_ASSEMBLY ( ch_samplesheet )
@@ -67,7 +67,7 @@ workflow STAPHIT2 {
     // Reads per sample: trimmed short reads (short/hybrid) or ONT reads (long-only).
     // Used by KMA and as the SCCmec typer's read fallback for split cassettes.
     // Snippy cannot align raw ONT reads, so long-only samples use their assembly (--ctgs).
-    def is_long = { meta, x -> meta.mode == 'long' }
+    def is_long = { meta, _x -> meta.mode == 'long' }
     ch_kma_reads    = ch_trimmed.mix(QC_ASSEMBLY.out.long_reads.filter(is_long))
     ch_snippy_reads = ch_trimmed.mix(ch_assemblies.filter(is_long))
 
@@ -89,8 +89,8 @@ workflow STAPHIT2 {
     // (nf-core modules may modify meta maps, breaking join on meta)
     def to_id = { meta, path -> [ meta.id, path ] }
 
-    // Long-only samples have no TrimGalore/FastQC output: give them empty placeholders
-    ch_long_only_ids = QC_ASSEMBLY.out.long_reads.filter(is_long).map { meta, lr -> meta.id }
+    // Long-only samples have no fastp/FastQC output: give them empty placeholders
+    ch_long_only_ids = QC_ASSEMBLY.out.long_reads.filter(is_long).map { meta, _lr -> meta.id }
     ch_trim_log  = QC_ASSEMBLY.out.trim_log.map(to_id)
         .mix(ch_long_only_ids.map { id -> [ id, file("${projectDir}/assets/NO_TRIMLOG") ] })
     ch_fastqc    = QC_ASSEMBLY.out.fastqc_zip.map(to_id)
@@ -126,8 +126,8 @@ workflow STAPHIT2 {
         ch_metadata = VALIDATE_METADATA.out.json
     } else {
         ch_metadata = params.metadata
-            ? Channel.fromPath(params.metadata, checkIfExists: true)
-            : Channel.of(file("${projectDir}/assets/NO_METADATA"))
+            ? channel.fromPath(params.metadata, checkIfExists: true)
+            : channel.of(file("${projectDir}/assets/NO_METADATA"))
     }
 
     ch_agg_final = ch_agg_in.combine(ch_metadata)
@@ -136,16 +136,16 @@ workflow STAPHIT2 {
 
     // Merge per-sample summaries into a single run-level table
     SUMMARY_MERGER (
-        AGGREGATOR.out.summary.map { meta, csv -> csv }.collect()
+        AGGREGATOR.out.summary.map { _meta, csv -> csv }.collect()
     )
 
     // ── Phase 7: Outbreak Clustering ────────────────────────────────────────
-    ch_cgmlst_dists = Channel.of(file("${projectDir}/assets/NO_CGMLST_DISTS"))
+    ch_cgmlst_dists = channel.of(file("${projectDir}/assets/NO_CGMLST_DISTS"))
 
     // Use Snippy whole-genome distances for clustering (more discriminatory)
     // Falls back to Panaroo core gene distances if Snippy not run
     CLUSTERING (
-        PHYLOGENY.out.cluster_dists.map { meta, tsv -> tsv },
+        PHYLOGENY.out.cluster_dists.map { _meta, tsv -> tsv },
         ch_cgmlst_dists,
         SUMMARY_MERGER.out.summary
     )
@@ -180,9 +180,9 @@ workflow STAPHIT2 {
 
     // ── MultiQC ─────────────────────────────────────────────────────────────
     ch_multiqc_files = ch_multiqc_files.mix(
-        QC_ASSEMBLY.out.fastqc_zip.collect { it[1] },
-        QC_ASSEMBLY.out.trim_log.collect { it[1] },
-        QC_ASSEMBLY.out.nanoplot_stats.collect { it[1] }
+        QC_ASSEMBLY.out.fastqc_zip.collect { row -> row[1] },
+        QC_ASSEMBLY.out.trim_log.collect { row -> row[1] },
+        QC_ASSEMBLY.out.nanoplot_stats.collect { row -> row[1] }
     )
 
     // Collate and save software versions
@@ -194,25 +194,25 @@ workflow STAPHIT2 {
             newLine: true
         ).set { ch_collated_versions }
 
-    ch_multiqc_config        = Channel.fromPath(
+    ch_multiqc_config        = channel.fromPath(
         "$projectDir/assets/multiqc_config.yml", checkIfExists: true)
     ch_multiqc_custom_config = params.multiqc_config
-        ? Channel.fromPath(params.multiqc_config, checkIfExists: true)
-        : Channel.empty()
+        ? channel.fromPath(params.multiqc_config, checkIfExists: true)
+        : channel.empty()
     ch_multiqc_logo          = params.multiqc_logo
-        ? Channel.fromPath(params.multiqc_logo, checkIfExists: true)
-        : Channel.empty()
+        ? channel.fromPath(params.multiqc_logo, checkIfExists: true)
+        : channel.empty()
 
     summary_params      = paramsSummaryMap(
         workflow, parameters_schema: "nextflow_schema.json")
-    ch_workflow_summary = Channel.value(paramsSummaryMultiqc(summary_params))
+    ch_workflow_summary = channel.value(paramsSummaryMultiqc(summary_params))
     ch_multiqc_files    = ch_multiqc_files.mix(
         ch_workflow_summary.collectFile(name: 'workflow_summary_mqc.yaml'))
 
     ch_multiqc_custom_methods_description = params.multiqc_methods_description
         ? file(params.multiqc_methods_description, checkIfExists: true)
         : file("$projectDir/assets/methods_description_template.yml", checkIfExists: true)
-    ch_methods_description = Channel.value(
+    ch_methods_description = channel.value(
         methodsDescriptionText(ch_multiqc_custom_methods_description))
     ch_multiqc_files = ch_multiqc_files.mix(ch_collated_versions)
     ch_multiqc_files = ch_multiqc_files.mix(

@@ -27,9 +27,9 @@ workflow PHYLOGENY {
 
     main:
 
-    ch_versions   = Channel.empty()
-    ch_snippy_dists = Channel.empty()
-    ch_beast2_tree  = Channel.empty()
+    ch_versions   = channel.empty()
+    ch_snippy_dists = channel.empty()
+    ch_beast2_tree  = channel.empty()
 
     //
     // MODULE: Annotate assemblies with Prokka (needed for Panaroo)
@@ -41,7 +41,7 @@ workflow PHYLOGENY {
     // PANAROO: core gene alignment → tree (runs if 'panaroo' or 'both')
     //
     if (params.phylo_method == 'panaroo' || params.phylo_method == 'both') {
-        PANAROO ( PROKKA.out.gff.map { meta, gff -> gff }.collect() )
+        PANAROO ( PROKKA.out.gff.map { _meta, gff -> gff }.collect() )
         ch_panaroo_aln = PANAROO.out.aln
 
         // Tree from Panaroo alignment
@@ -64,10 +64,10 @@ workflow PHYLOGENY {
     // SNIPPY: reference-based SNPs → distances for clustering (runs if 'snippy' or 'both')
     //
     if (params.phylo_method == 'snippy' || params.phylo_method == 'both') {
-        ch_ref = Channel.fromPath(params.reference, checkIfExists: true)
+        ch_ref = channel.fromPath(params.reference, checkIfExists: true)
         SNIPPY ( ch_trimmed_reads, ch_ref.collect() )
         SNIPPY_CORE (
-            SNIPPY.out.results.map { meta, dir -> dir }.collect(),
+            SNIPPY.out.results.map { _meta, dir -> dir }.collect(),
             ch_ref.collect()
         )
 
@@ -78,12 +78,12 @@ workflow PHYLOGENY {
         // Optional Bayesian phylodynamics (--use_beast)
         if (params.use_beast) {
             ch_metadata = params.metadata
-                ? Channel.fromPath(params.metadata, checkIfExists: true)
-                : Channel.fromPath("${projectDir}/assets/NO_METADATA")
+                ? channel.fromPath(params.metadata, checkIfExists: true)
+                : channel.fromPath("${projectDir}/assets/NO_METADATA")
             BEAST2(
                 SNIPPY_CORE.out.aln,
                 ch_metadata,
-                Channel.value(file("${projectDir}/bin/beast2_prep.py"))
+                channel.value(file("${projectDir}/bin/beast2_prep.py"))
             )
             ch_beast2_tree = BEAST2.out.mcc_tree
         }
