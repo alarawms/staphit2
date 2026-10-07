@@ -2,9 +2,6 @@ process PLOT_TREE {
     tag "phylogeny"
     label 'process_medium'
     container 'quay.io/biocontainers/bioconductor-ggtreeextra:1.20.1--r45hdfd78af_0'
-    errorStrategy 'ignore'
-
-    publishDir "${params.outdir}/phylogeny", mode: 'copy', pattern: '*.{pdf,svg}'
 
     input:
     path treefile
@@ -14,6 +11,8 @@ process PLOT_TREE {
     output:
     path "*.pdf", emit: pdf, optional: true
     path "*.svg", emit: svg, optional: true
+    tuple val("${task.process}"), val('r-base'), eval("Rscript -e 'cat(R.version[[\"major\"]], R.version[[\"minor\"]], sep=\".\")'"), topic: versions, emit: versions_r_base
+    tuple val("${task.process}"), val('ggtree'), eval("Rscript -e 'cat(as.character(packageVersion(\"ggtree\")))'"), topic: versions, emit: versions_ggtree
 
     script:
     def run_name = params.outdir.split('/').last()
@@ -35,6 +34,11 @@ process PLOT_TREE {
     ln -sf \$(realpath ${summary})  summary/combined_summary.tsv
     ln -sf \$(realpath ${clusters}) clusters/clusters.tsv
 
-    R_LIBS=\$PWD/rlibs Rscript ${projectDir}/bin/plot_tree.R . ${run_name}
+    R_LIBS=\$PWD/rlibs Rscript plot_tree.R . ${run_name}
+    """
+
+    stub:
+    """
+    touch stub_tree.pdf
     """
 }

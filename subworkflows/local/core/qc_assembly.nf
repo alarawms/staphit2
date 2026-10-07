@@ -29,10 +29,10 @@ workflow QC_ASSEMBLY {
 
     main:
 
-    ch_versions = Channel.empty()
+    ch_versions = channel.empty()
 
     // ── Short reads (short + hybrid samples): trim → subsample → FastQC ─────
-    ch_short = ch_reads.filter { meta, sr, lr -> sr }.map { meta, sr, lr -> [ meta, sr ] }
+    ch_short = ch_reads.filter { _meta, sr, _lr -> sr }.map { meta, sr, _lr -> [ meta, sr ] }
 
     FASTP ( ch_short )
     ch_trim_log = FASTP.out.json
@@ -44,13 +44,14 @@ workflow QC_ASSEMBLY {
     ch_trimmed = RASUSA.out.reads
 
     FASTQC ( ch_trimmed )
+    ch_versions = ch_versions.mix(FASTQC.out.versions)
 
     // ── Long reads (long + hybrid samples): NanoPlot QC ─────────────────────
-    ch_long = ch_reads.filter { meta, sr, lr -> lr }.map { meta, sr, lr -> [ meta, lr ] }
+    ch_long = ch_reads.filter { _meta, _sr, lr -> lr }.map { meta, _sr, lr -> [ meta, lr ] }
     NANOPLOT ( ch_long )
 
     // ── Assembly, routed by mode ────────────────────────────────────────────
-    ch_trimmed_short_only = ch_trimmed.filter { meta, reads -> meta.mode == 'short' }
+    ch_trimmed_short_only = ch_trimmed.filter { meta, _reads -> meta.mode == 'short' }
 
     if (params.assembler == 'spades') {
         SPADES (
@@ -65,20 +66,20 @@ workflow QC_ASSEMBLY {
     }
 
     // Long-only: Flye; hybrid: Flye + Polypolish with the trimmed short reads
-    ch_dragonflye_in = ch_long.filter { meta, lr -> meta.mode == 'long' }
+    ch_dragonflye_in = ch_long.filter { meta, _lr -> meta.mode == 'long' }
         .map { meta, lr -> [ meta, lr, [] ] }
         .mix(
-            ch_long.filter { meta, lr -> meta.mode == 'hybrid' }
+            ch_long.filter { meta, _lr -> meta.mode == 'hybrid' }
                 .map { meta, lr -> [ meta.id, meta, lr ] }
                 .join(ch_trimmed.map { meta, sr -> [ meta.id, sr ] })
-                .map { id, meta, lr, sr -> [ meta, lr, sr ] }
+                .map { _id, meta, lr, sr -> [ meta, lr, sr ] }
         )
     DRAGONFLYE ( ch_dragonflye_in )
 
     ch_primary_scaffolds = ch_short_scaffolds.mix(DRAGONFLYE.out.scaffolds)
 
     ch_skesa_branched = ch_primary_scaffolds.branch {
-        meta, fasta ->
+        _meta, fasta ->
             pass: fasta.size() > 500000
             fail: true
     }
@@ -104,21 +105,27 @@ workflow QC_ASSEMBLY {
     //
     // MODULE: Download CheckM2 database (runs once)
     //
-    CHECKM2_DB ()
+    // --checkm2_db reuses a local uniref100.KO.1.dmnd
+    if (params.checkm2_db) {
+        ch_checkm2_db = channel.value(file(params.checkm2_db, checkIfExists: true))
+    } else {
+        CHECKM2_DB ()
+        ch_checkm2_db = CHECKM2_DB.out.db
+    }
 
     //
     // MODULE: Assess assembly completeness with CheckM2
     //
     CHECKM2 (
         ch_assemblies,
-        CHECKM2_DB.out.db
+        ch_checkm2_db
     )
 
     //
     // MODULE: QC Gate — filter samples by completeness/contamination
     //
     QC_GATE (
-        CHECKM2.out.report.map { meta, report -> report }.collect()
+        CHECKM2.out.report.map { _meta, report -> report }.collect()
     )
 
     //
@@ -129,15 +136,15 @@ workflow QC_ASSEMBLY {
     } else {
         ch_passed_ids = QC_GATE.out.passed
             .splitText()
-            .map { it.trim() }
-            .filter { it }
+            .map { s -> s.trim() }
+            .filter { s -> s }
             .collect()
-            .map { it.toSet() }
+            .map { ids -> ids.toSet() }
 
         ch_passed_assemblies = ch_assemblies
             .combine(ch_passed_ids)
-            .filter { meta, fasta, passed_set -> meta.id in passed_set }
-            .map { meta, fasta, passed_set -> [ meta, fasta ] }
+            .filter { meta, _fasta, passed_set -> meta.id in passed_set }
+            .map { meta, fasta, _passed_set -> [ meta, fasta ] }
     }
 
     emit:

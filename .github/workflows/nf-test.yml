@@ -21,6 +21,7 @@ env:
   NFT_VER: "0.9.3"
   NFT_WORKDIR: "~"
   NXF_ANSI_LOG: false
+  NXF_SYNTAX_PARSER: v1   # nf-test 0.9.x generates `PROC(*input)`, which the strict (v2) parser rejects
   NXF_SINGULARITY_CACHEDIR: ${{ github.workspace }}/.singularity
   NXF_SINGULARITY_LIBRARYDIR: ${{ github.workspace }}/.singularity
 

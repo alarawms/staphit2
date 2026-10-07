@@ -1,0 +1,27 @@
+nextflow_process {
+
+    name "Test FASTP"
+    script "../../../modules/local/fastp.nf"
+    process "FASTP"
+    tag "fastp"
+    options "-stub"
+
+    test("paired-end - stub") {
+        when {
+            process {
+                """
+                input[0] = [ [id: 'S1', mode: 'short'],
+                             [ file("${projectDir}/tests/data/stub/short_R1.fastq.gz", checkIfExists: true),
+                               file("${projectDir}/tests/data/stub/short_R2.fastq.gz", checkIfExists: true) ] ]
+                """
+            }
+        }
+        then {
+            assertAll(
+                { assert process.success },
+                { assert process.out.reads[0][1].size() == 2 },
+                { assert snapshot(process.out.json, process.out.versions_fastp).match() }
+            )
+        }
+    }
+}

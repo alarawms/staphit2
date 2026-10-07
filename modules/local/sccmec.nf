@@ -3,7 +3,6 @@ process SCCMEC {
     label 'process_low'
     container "${params.sccmec_container}"
     containerOptions '--entrypoint ""'
-    publishDir path: { "${params.outdir}/sccmec/${meta.id}" }, mode: 'copy'
 
     input:
     tuple val(meta), path(assembly), path(reads, stageAs: 'reads/*')
@@ -14,6 +13,7 @@ process SCCMEC {
     tuple val(meta), path("${meta.id}_sccmec_elements.csv")     , emit: elements
     tuple val(meta), path("${meta.id}_sccmec_map.svg")          , optional: true, emit: svg
     tuple val(meta), path("${meta.id}_sccmec_report.html")      , optional: true, emit: html
+    tuple val("${task.process}"), val('sccmec_typer'), val(task.container), topic: versions, emit: versions_sccmec_typer
 
     script:
     def viz_flag      = params.sccmec_viz      ? ''                                                   : '--no-viz'
@@ -29,5 +29,10 @@ process SCCMEC {
         -o ${meta.id}_sccmec \\
         --threads ${task.cpus} \\
         ${viz_flag} ${bestfit_flag} ${fallback_flag}
+    """
+
+    stub:
+    """
+    touch ${meta.id}_sccmec.tsv ${meta.id}_sccmec.json ${meta.id}_sccmec_elements.csv
     """
 }

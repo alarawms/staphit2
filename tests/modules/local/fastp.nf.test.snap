@@ -1,0 +1,27 @@
+{
+    "paired-end - stub": {
+        "content": [
+            [
+                [
+                    {
+                        "id": "S1",
+                        "mode": "short"
+                    },
+                    "S1.fastp.json:md5,8a80554c91d9fca8acb82f023de02f11"
+                ]
+            ],
+            [
+                [
+                    "FASTP",
+                    "fastp",
+                    "0.24.0"
+                ]
+            ]
+        ],
+        "meta": {
+            "nf-test": "0.9.3",
+            "nextflow": "26.04.6"
+        },
+        "timestamp": "2026-10-07T18:07:11.997306254"
+    }
+}

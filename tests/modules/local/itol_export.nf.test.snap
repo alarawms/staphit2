@@ -1,0 +1,18 @@
+{
+    "tree + summary - stub": {
+        "content": [
+            [
+                [
+                    "ITOL_EXPORT",
+                    "python",
+                    "3.12.15"
+                ]
+            ]
+        ],
+        "meta": {
+            "nf-test": "0.9.3",
+            "nextflow": "26.04.6"
+        },
+        "timestamp": "2026-10-07T18:07:48.789646493"
+    }
+}

@@ -102,13 +102,6 @@
                         "installed_by": [
                             "modules"
                         ]
-                    },
-                    "trimgalore": {
-                        "branch": "master",
-                        "git_sha": "eed5d14302a6c9070dcc25feeab707a27a4b3254",
-                        "installed_by": [
-                            "modules"
-                        ]
                     }
                 }
             },

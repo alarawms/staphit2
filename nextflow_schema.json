@@ -350,9 +350,27 @@
                     "exists": true,
                     "description": "Local Mash RefSeq sketch (refseq.genomes.k21s1000.msh). Omit to download"
                 },
+                "checkm2_db": {
+                    "type": "string",
+                    "format": "file-path",
+                    "exists": true,
+                    "description": "Local CheckM2 DIAMOND database (uniref100.KO.1.dmnd). Omit to download"
+                },
+                "amrfinder_db": {
+                    "type": "string",
+                    "format": "file-path",
+                    "exists": true,
+                    "description": "Local AMRFinderPlus database (amrfinderdb.tar.gz from amrfinder_update). Omit to download"
+                },
+                "resfinder_db_commit": {
+                    "type": "string",
+                    "default": "eecf0aa207594fe6d51badf808473de62b28cb06",
+                    "pattern": "^[0-9a-f]{7,40}$",
+                    "description": "ResFinder database git commit (bitbucket.org/genomicepidemiology/resfinder_db) used for KMA"
+                },
                 "sccmec_container": {
                     "type": "string",
-                    "default": "docker.io/alarawms/sccmec_typer:latest",
+                    "default": "docker.io/alarawms/sccmec_typer@sha256:2d1510a694f6b6b588c55e6fa155b0db1b13db27ec8907a11b157daf1eed6600",
                     "description": "Container image for SCCmec typing (sccmec_typer); override to test a typer build"
                 },
                 "sccmec_best_fit": {

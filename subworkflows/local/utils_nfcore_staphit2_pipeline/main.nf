@@ -92,9 +92,9 @@ workflow PIPELINE_INITIALISATION {
                 // Paths are plain strings in the schema (nf-schema's file-path format does
                 // 3 network round-trips per remote URL); convert to files here instead
                 // Local files must exist; remote URLs are not checked (no network round-trip)
-                def short_reads = [ fastq_1, fastq_2 ].findAll { it }
+                def short_reads = [ fastq_1, fastq_2 ].findAll { f -> f }
                     .collect { p -> p =~ /^\w+:\/\// ? file(p) : file(p, checkIfExists: true) }
-                def long_reads  = [ long_fastq ].findAll { it }
+                def long_reads  = [ long_fastq ].findAll { f -> f }
                     .collect { p -> p =~ /^\w+:\/\// ? file(p) : file(p, checkIfExists: true) }
                 def mode = short_reads && long_reads ? 'hybrid' : (long_reads ? 'long' : 'short')
                 return [ meta.id, meta + [ single_end: short_reads.size() == 1, mode: mode ], short_reads, long_reads ]

@@ -29,9 +29,14 @@ workflow AMR_DETECTION {
         def single_fasta = fasta instanceof List ? fasta[0] : fasta
         [ new_meta, single_fasta ]
     }
-    // Download AMRFinderPlus database, then run
-    AMRFINDERPLUS_UPDATE ()
-    AMRFINDERPLUS_RUN ( ch_amr_input, AMRFINDERPLUS_UPDATE.out.db )
+    // --amrfinder_db reuses a local amrfinderdb.tar.gz; otherwise download (cached via storeDir)
+    if (params.amrfinder_db) {
+        ch_amrfinder_db = channel.value(file(params.amrfinder_db, checkIfExists: true))
+    } else {
+        AMRFINDERPLUS_UPDATE ()
+        ch_amrfinder_db = AMRFINDERPLUS_UPDATE.out.db
+    }
+    AMRFINDERPLUS_RUN ( ch_amr_input, ch_amrfinder_db )
 
     //
     // Assembly-based screening with ABRicate (resfinder + vfdb + plasmidfinder)

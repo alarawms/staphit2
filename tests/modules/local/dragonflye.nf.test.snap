@@ -1,0 +1,25 @@
+{
+    "long-only - stub": {
+        "content": [
+            [
+                [
+                    "DRAGONFLYE",
+                    "dragonflye",
+                    "1.2.1"
+                ]
+            ],
+            [
+                [
+                    "DRAGONFLYE",
+                    "flye",
+                    "2.9.4-b1799"
+                ]
+            ]
+        ],
+        "meta": {
+            "nf-test": "0.9.3",
+            "nextflow": "26.04.6"
+        },
+        "timestamp": "2026-10-07T18:07:29.58296208"
+    }
+}

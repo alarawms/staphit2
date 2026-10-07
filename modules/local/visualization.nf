@@ -1,7 +1,6 @@
 process VISUALIZATION {
     label 'process_low'
-    publishDir "${params.outdir}/figures", mode: 'copy'
-    container 'docker.io/python:3.9'
+    container 'ghcr.io/alarawms/staphit2-python:1.0.0'
 
     input:
     path summary_tsv
@@ -9,12 +8,16 @@ process VISUALIZATION {
 
     output:
     path "plots/*.png", optional: true, emit: plots
+    tuple val("${task.process}"), val('python'), eval("python3 --version | sed 's/Python //'"), topic: versions, emit: versions_python
 
     script:
     """
-    pip install matplotlib seaborn pandas > /dev/null 2>&1 || true
     mkdir -p plots
-    python3 ${projectDir}/bin/staphit-visualize ${summary_tsv} plots 2>&1 || true
-    ls -la plots/ || true
+    staphit-visualize ${summary_tsv} plots
+    """
+
+    stub:
+    """
+    mkdir plots
     """
 }

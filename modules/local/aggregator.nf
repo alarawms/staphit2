@@ -1,9 +1,8 @@
 process AGGREGATOR {
     tag "$meta.id"
     label 'process_low'
-    publishDir "${params.outdir}/aggregated", mode: 'copy'
     stageInMode 'copy'
-    container 'docker.io/python:3.9'
+    container 'ghcr.io/alarawms/staphit2-python:1.0.0'
 
     input:
     tuple val(meta),
@@ -23,12 +22,13 @@ process AGGREGATOR {
     output:
     tuple val(meta), path("${meta.id}_report.json"), emit: report
     tuple val(meta), path("${meta.id}_summary.csv"), emit: summary
+    tuple val("${task.process}"), val('python'), eval("python3 --version | sed 's/Python //'"), topic: versions, emit: versions_python
 
     script:
     def trim_file = trim_log instanceof List ? trim_log[0] : trim_log
     """
     # v7: sccmec typing mode + cassette columns; v6: typer mec-locus proximity; v5: sccmec IWG columns; v4: harmonized year/host/source/sccmec_group columns; v3: fastp parser + metadata summary columns (bump to force re-aggregation after bin/staphit-aggregate changes)
-    python3 ${projectDir}/bin/staphit-aggregate \
+    staphit-aggregate \
         --sample-id ${meta.id} \
         --trim-log ${trim_file} \
         --fastqc-dir . \
@@ -43,5 +43,11 @@ process AGGREGATOR {
         --kma kma_input.res \
         --metadata ${metadata_json} \
         --outdir .
+    """
+
+    stub:
+    """
+    echo '{}' > ${meta.id}_report.json
+    printf "sample_id\n${meta.id}\n" > ${meta.id}_summary.csv
     """
 }
