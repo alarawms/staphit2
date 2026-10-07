@@ -72,12 +72,18 @@ workflow SPECIES_QC {
     //
     // MODULE: Download Mash RefSeq sketch (once, cached)
     //
-    MASH_REFSEQ_DB ()
+    // --mash_db reuses a local sketch (the download host is not always reachable from containers)
+    if (params.mash_db) {
+        ch_mash_raw = Channel.value(file(params.mash_db, checkIfExists: true))
+    } else {
+        MASH_REFSEQ_DB ()
+        ch_mash_raw = MASH_REFSEQ_DB.out.db
+    }
 
     //
     // MODULE: Mash screen on rejected samples to identify species
     //
-    ch_mash_db = MASH_REFSEQ_DB.out.db.map { db -> [ [id: 'refseq'], db ] }
+    ch_mash_db = ch_mash_raw.map { db -> [ [id: 'refseq'], db ] }
 
     MASH_SCREEN (
         ch_rejected_assemblies,
@@ -88,12 +94,19 @@ workflow SPECIES_QC {
     //
     // MODULE: Collate species report
     //
+    // fastANI writes nothing when a genome is too divergent (another species), so emit
+    // an explicit ANI-0 line for those; otherwise they'd vanish from the report.
     ch_fastani_collected = FASTANI.out.ani
-        .map { meta, f -> f }
+        .map { meta, f -> f.text.trim() ? f.text.trim() + '\n' : "${meta.id}.scaffolds.fasta\tnone\t0\t0\t0\n" }
         .collectFile(name: 'fastani_all.tsv')
 
+    // Keep only each rejected sample's best Mash hit, prefixed with its sample ID
     ch_mash_collected = MASH_SCREEN.out.screen
-        .map { meta, screen -> screen }
+        .map { meta, screen ->
+            def best = screen.text.readLines().findAll { it.trim() }
+                .max { it.split('\t')[0] as Double }
+            best ? "${meta.id}\t${best}\n" : ''
+        }
         .collectFile(name: 'mash_screen_all.tsv')
         .ifEmpty(file('NO_MASH_RESULTS'))
 

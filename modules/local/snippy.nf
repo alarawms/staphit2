@@ -1,7 +1,7 @@
 process SNIPPY {
     tag "$meta.id"
     label 'process_medium'
-    publishDir "${params.outdir}/snippy/${meta.id}", mode: 'link'
+    publishDir path: { "${params.outdir}/snippy/${meta.id}" }, mode: 'copy'   // 'link' fails across filesystems
     errorStrategy 'ignore'
     container 'docker.io/staphb/snippy:4.6.0'
 
@@ -13,8 +13,12 @@ process SNIPPY {
     tuple val(meta), path("${meta.id}"), emit: results
 
     script:
+    // Long-only samples arrive as their assembly (Snippy cannot align raw ONT reads)
+    def input = meta.mode == 'long' ? "--ctgs ${reads}" : "--R1 ${reads[0]} --R2 ${reads[1]}"
     """
-    snippy --cpus ${task.cpus} --ram ${task.memory.toGiga()} --outdir ${meta.id} --ref ${reference} --R1 ${reads[0]} --R2 ${reads[1]} --mincov ${params.snippy_mincov} --minqual ${params.snippy_minqual} --cleanup
+    snippy --cpus ${task.cpus} --ram ${task.memory.toGiga()} --outdir ${meta.id} --ref ${reference} ${input} --mincov ${params.snippy_mincov} --minqual ${params.snippy_minqual} --cleanup
+    # Remove broken symlinks left by --cleanup so publishDir doesn't fail on them
+    find ${meta.id} -xtype l -delete
     """
 }
 

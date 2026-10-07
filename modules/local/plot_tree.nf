@@ -18,11 +18,13 @@ process PLOT_TREE {
     script:
     def run_name = params.outdir.split('/').last()
     """
+    # v3: sccmec_group from summary; v2: harmonized year/host/source rings, explicit ring width, no svglite/readr
+    #     (bump this line after editing bin/plot_tree.R so -resume re-plots)
     # Install missing CRAN packages into local lib (cached by work dir on -resume)
     mkdir -p rlibs
     Rscript -e "
         .libPaths(c('rlibs', .libPaths()))
-        pkgs <- c('svglite', 'ggnewscale', 'RColorBrewer', 'dplyr', 'readr', 'stringr')
+        pkgs <- c('ggnewscale', 'RColorBrewer', 'dplyr', 'stringr')
         new  <- pkgs[!pkgs %in% installed.packages()[,'Package']]
         if (length(new)) install.packages(new, repos='https://cloud.r-project.org', lib='rlibs', quiet=TRUE)
     "

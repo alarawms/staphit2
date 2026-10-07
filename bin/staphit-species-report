@@ -32,21 +32,23 @@ def parse_fastani(path):
 
 
 def parse_mash_screen(path):
-    """Parse Mash screen output: identity, shared-hashes, median-multiplicity, p-value, query-ID."""
-    results = []
+    """Parse per-sample best Mash hits: sample_id, identity, shared-hashes,
+    median-multiplicity, p-value, query-ID (RefSeq file), query-comment (organism)."""
+    results = {}
     if not path or not os.path.exists(path):
         return results
     with open(path) as fh:
         for line in fh:
-            parts = line.strip().split('\t')
-            if len(parts) >= 5:
-                results.append({
-                    'identity': float(parts[0]),
-                    'shared_hashes': parts[1],
-                    'median_multiplicity': int(parts[2]),
-                    'organism': parts[4] if len(parts) > 4 else parts[3],
-                    'accession': parts[5] if len(parts) > 5 else '',
-                })
+            parts = line.rstrip('\n').split('\t')
+            if len(parts) >= 6:
+                comment = parts[6] if len(parts) > 6 else ''
+                comment = re.sub(r'^\[\d+ seqs\]\s*', '', comment)   # "[19 seqs] NZ_x Genus species ..."
+                organism = ' '.join(comment.split()[1:3]) if comment else parts[5]
+                results[parts[0]] = {
+                    'identity': float(parts[1]),
+                    'organism': organism,
+                    'accession': parts[5].split('_genomic')[0],
+                }
     return results
 
 
@@ -87,17 +89,15 @@ def main(argv=None):
         for row in confirmed + excluded:
             writer.writerow(row)
 
-    # Enrich excluded with Mash screen hits
-    mash_results = parse_mash_screen(args.mash_screen) if args.mash_screen else []
-    mash_by_rank = sorted(mash_results, key=lambda x: -x['identity'])
-
+    # Enrich excluded with each sample's own best Mash screen hit
+    mash_by_sample = parse_mash_screen(args.mash_screen) if args.mash_screen else {}
     excluded_path = os.path.join(args.outdir, 'species_excluded.tsv')
     with open(excluded_path, 'w', newline='') as fh:
         writer = csv.DictWriter(fh, delimiter='\t',
                                 fieldnames=['sample_id', 'ani_percent', 'identified_species', 'mash_identity', 'mash_accession'])
         writer.writeheader()
-        for i, entry in enumerate(excluded):
-            mash_hit = mash_by_rank[i] if i < len(mash_by_rank) else {}
+        for entry in excluded:
+            mash_hit = mash_by_sample.get(entry['sample_id'], {})
             writer.writerow({
                 'sample_id': entry['sample_id'],
                 'ani_percent': entry['ani_percent'],

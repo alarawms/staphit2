@@ -334,6 +334,26 @@
                     "type": "boolean",
                     "default": false,
                     "description": "Skip fastANI species confirmation (assume all samples are S. aureus)."
+                },
+                "flye_nanohq": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Run Flye with --nano-hq (R10.4.1 / Q20+ reads) for long-read and hybrid samples"
+                },
+                "medaka_model": {
+                    "type": "string",
+                    "description": "Medaka model for long-read polishing (e.g. r1041_e82_400bps_sup_v5.0.0). Omit to skip Medaka"
+                },
+                "mash_db": {
+                    "type": "string",
+                    "format": "file-path",
+                    "exists": true,
+                    "description": "Local Mash RefSeq sketch (refseq.genomes.k21s1000.msh). Omit to download"
+                },
+                "sccmec_container": {
+                    "type": "string",
+                    "default": "docker.io/alarawms/sccmec_typer:latest",
+                    "description": "Container image for SCCmec typing (sccmec_typer); override to test a typer build"
                 }
             }
         },

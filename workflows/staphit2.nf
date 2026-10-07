@@ -2,7 +2,7 @@
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     STAPHIT2 — MRSA GENOMIC SURVEILLANCE PIPELINE
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    Phase 1: QC & Assembly
+    Phase 1: QC & Assembly (auto short / hybrid / long-read per sample)
     Phase 2: S. aureus Typing (MLST, spa, SCCmec, agr, Mash)
     Phase 3: AMR Detection (AMRFinderPlus, ABRicate, KMA)
     Phase 4: Plasmid Analysis (MOB-suite)
@@ -29,10 +29,12 @@ include { SPECIES_QC       } from '../subworkflows/local/core/species_qc'
 
 // Reporting modules (wired directly for flexible channel joining)
 include { AGGREGATOR       } from '../modules/local/aggregator'
+include { VALIDATE_METADATA } from '../modules/local/validate_metadata'
 include { SUMMARY_MERGER   } from '../modules/local/summary_merger'
 include { REPORT           } from '../modules/local/report'
 include { VISUALIZATION    } from '../modules/local/visualization'
 include { PLOT_TREE        } from '../modules/local/plot_tree'
+include { ITOL_EXPORT      } from '../modules/local/itol_export'
 
 // MultiQC
 include { MULTIQC          } from '../modules/nf-core/multiqc/main'
@@ -62,17 +64,24 @@ workflow STAPHIT2 {
     }
 
     // ── Phase 2: S. aureus Typing ───────────────────────────────────────────
-    SA_TYPING ( ch_assemblies )
+    // Reads per sample: trimmed short reads (short/hybrid) or ONT reads (long-only).
+    // Used by KMA and as the SCCmec typer's read fallback for split cassettes.
+    // Snippy cannot align raw ONT reads, so long-only samples use their assembly (--ctgs).
+    def is_long = { meta, x -> meta.mode == 'long' }
+    ch_kma_reads    = ch_trimmed.mix(QC_ASSEMBLY.out.long_reads.filter(is_long))
+    ch_snippy_reads = ch_trimmed.mix(ch_assemblies.filter(is_long))
+
+    SA_TYPING ( ch_assemblies, ch_kma_reads )
     ch_versions = ch_versions.mix(SA_TYPING.out.versions)
 
     // ── Phase 3: AMR Detection ──────────────────────────────────────────────
-    AMR_DETECTION ( ch_assemblies, ch_trimmed )
+    AMR_DETECTION ( ch_assemblies, ch_kma_reads )
 
     // ── Phase 4: Plasmid Analysis ───────────────────────────────────────────
     PLASMID_ANALYSIS ( ch_assemblies )
 
     // ── Phase 5: Phylogeny ──────────────────────────────────────────────────
-    PHYLOGENY ( ch_assemblies, ch_trimmed )
+    PHYLOGENY ( ch_assemblies, ch_snippy_reads )
     ch_versions = ch_versions.mix(PHYLOGENY.out.versions)
 
     // ── Phase 6: Per-sample Aggregation ─────────────────────────────────────
@@ -80,8 +89,15 @@ workflow STAPHIT2 {
     // (nf-core modules may modify meta maps, breaking join on meta)
     def to_id = { meta, path -> [ meta.id, path ] }
 
-    ch_agg_in = QC_ASSEMBLY.out.trim_log.map(to_id)
-        .join(QC_ASSEMBLY.out.fastqc_zip.map(to_id))
+    // Long-only samples have no TrimGalore/FastQC output: give them empty placeholders
+    ch_long_only_ids = QC_ASSEMBLY.out.long_reads.filter(is_long).map { meta, lr -> meta.id }
+    ch_trim_log  = QC_ASSEMBLY.out.trim_log.map(to_id)
+        .mix(ch_long_only_ids.map { id -> [ id, file("${projectDir}/assets/NO_TRIMLOG") ] })
+    ch_fastqc    = QC_ASSEMBLY.out.fastqc_zip.map(to_id)
+        .mix(ch_long_only_ids.map { id -> [ id, file("${projectDir}/assets/NO_FASTQC") ] })
+
+    ch_agg_in = ch_trim_log
+        .join(ch_fastqc)
         .join(QC_ASSEMBLY.out.quast_results.map(to_id))
         .join(SA_TYPING.out.mlst.map(to_id))
         .join(AMR_DETECTION.out.abricate.map(to_id))
@@ -98,10 +114,21 @@ workflow STAPHIT2 {
             [ meta ] + items[1..-1]
         }
 
-    // Broadcast metadata JSON to all samples (or placeholder if not provided)
-    ch_metadata = params.metadata
-        ? Channel.fromPath(params.metadata, checkIfExists: true)
-        : Channel.of(file("${projectDir}/assets/NO_METADATA"))
+    // Broadcast metadata JSON to all samples (or placeholder if not provided).
+    // A CSV (e.g. from bin/fetch_metadata.py) is validated and converted to JSON first.
+    if (params.metadata && params.metadata.toString().endsWith('.csv')) {
+        VALIDATE_METADATA (
+            file(params.metadata, checkIfExists: true),
+            params.antibiogram ? file(params.antibiogram, checkIfExists: true)
+                               : file("${projectDir}/assets/NO_ANTIBIOGRAM"),
+            file(params.input, checkIfExists: true)
+        )
+        ch_metadata = VALIDATE_METADATA.out.json
+    } else {
+        ch_metadata = params.metadata
+            ? Channel.fromPath(params.metadata, checkIfExists: true)
+            : Channel.of(file("${projectDir}/assets/NO_METADATA"))
+    }
 
     ch_agg_final = ch_agg_in.combine(ch_metadata)
 
@@ -144,9 +171,18 @@ workflow STAPHIT2 {
         )
     }
 
+    // iTOL annotation files (same harmonized labels/colours as the PDF tree)
+    ITOL_EXPORT (
+        PHYLOGENY.out.tree.map { _meta, tree -> tree }.first(),
+        SUMMARY_MERGER.out.summary,
+        CLUSTERING.out.clusters
+    )
+
     // ── MultiQC ─────────────────────────────────────────────────────────────
     ch_multiqc_files = ch_multiqc_files.mix(
-        QC_ASSEMBLY.out.fastqc_zip.collect { it[1] }
+        QC_ASSEMBLY.out.fastqc_zip.collect { it[1] },
+        QC_ASSEMBLY.out.trim_log.collect { it[1] },
+        QC_ASSEMBLY.out.nanoplot_stats.collect { it[1] }
     )
 
     // Collate and save software versions

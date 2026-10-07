@@ -7,6 +7,9 @@ import os
 import re
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import harmonize_metadata as hm  # noqa: E402  (shared year/host/source labels)
+
 # ---------------------------------------------------------------------------
 # Mutation constants (inline — don't import from staphit-mutations)
 # ---------------------------------------------------------------------------
@@ -94,9 +97,16 @@ def parse_metadata(json_path, sample_id):
 
 
 def parse_trimmomatic(log_path):
-    """Parse a TrimGalore (or Trimmomatic) log file for read survival stats."""
+    """Parse a fastp JSON, TrimGalore or Trimmomatic log for read survival stats."""
     with open(log_path, 'r') as f:
         content = f.read()
+    # fastp JSON (pipeline default)
+    if content.lstrip().startswith('{'):
+        s = json.loads(content)['summary']
+        raw, surviving = s['before_filtering']['total_reads'], s['after_filtering']['total_reads']
+        rate = (surviving / raw * 100) if raw > 0 else 0
+        return {'raw_reads': raw, 'trimmed_reads': surviving, 'survival_rate': round(rate, 2),
+                'q30_rate': round(s['after_filtering']['q30_rate'] * 100, 2)}
     # Try TrimGalore format first (pipeline default)
     raw_match = re.search(r'Total reads processed:\s+([\d,]+)', content)
     surv_match = re.search(r'Reads written \(passing filters\):\s+([\d,]+)', content)
@@ -351,7 +361,17 @@ SUMMARY_HEADERS = [
     'point_mutations', 'geno_pheno_discordance',
     'virulence_genes', 'virulence_summary', 'plasmids',
     'infection_origin', 'ast_profile',
+    # standardized sample metadata (--metadata, e.g. from bin/fetch_metadata.py)
+    'collection_date', 'geo_loc_country', 'geo_loc_region', 'host',
+    'isolation_source', 'biosample_accession',
+    # harmonized categories (bin/harmonize_metadata.py) used by plot_tree.R and iTOL
+    'year', 'host_group', 'source_group', 'sccmec_group',
+    # IWG-SCC detail from sccmec_typer >= feat/iwg-designation (blank for older typer output)
+    'sccmec_iwg', 'sccmec_type_candidates', 'sccmec_assembly_limited',
+    'sccmec_typing_mode', 'sccmec_cassette',
 ]
+METADATA_SUMMARY_FIELDS = ['collection_date', 'geo_loc_country', 'geo_loc_region', 'host',
+                           'isolation_source', 'biosample_accession']
 
 
 def build_summary_row(data):
@@ -423,7 +443,14 @@ def build_summary_row(data):
         point_mut_str, geno_pheno_discord,
         vir_genes, virulence_summary, plasmids_str,
         infection_origin, ast_profile,
-    ]
+    ] + [data.get('metadata', {}).get(f, '') for f in METADATA_SUMMARY_FIELDS]
+    md = data.get('metadata', {})
+    values += [hm.year(md.get('collection_date')), hm.host_group(md.get('host')),
+               hm.source_group(md.get('isolation_source')), hm.sccmec_group(sccmec_type)]
+    scc_row = typing.get('sccmec', {}).get('full_row', {})
+    values += [scc_row.get('IWG_Type', ''), scc_row.get('Type_Candidates', ''),
+               scc_row.get('Assembly_Limited', ''), scc_row.get('Typing_Mode', ''),
+               scc_row.get('Cassette_Segments', '')]
     return SUMMARY_HEADERS, values
 
 
