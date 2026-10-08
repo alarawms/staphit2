@@ -497,7 +497,7 @@ When metadata is provided, cluster reports are annotated with epidemiological co
 
 - `report/`
   - `run_report.md`: Automated Markdown surveillance report.
-  - `sample_status.tsv`: Every input sample with `status` (`included`, `not_in_tree`, `dropped`), the `stage` where it was lost and the `reason`.
+  - `sample_status.tsv`: Every input sample with `status` (`included`, `not_in_tree`, `dropped`), the `stage` where it was lost the `reason`, and `flags` for kept samples.
 
 </details>
 
@@ -505,14 +505,16 @@ The report generator (`bin/staphit-report`) produces a narrative Markdown report
 
 Samples can drop out at several points; `sample_status.tsv` and the report's _Sample Status_ section list each one with the first stage it failed:
 
-| Stage                | Meaning                                                                                             |
-| -------------------- | --------------------------------------------------------------------------------------------------- |
-| `assembly_failed`    | The assembler produced no contigs (its error is ignored so the run continues)                       |
-| `assembly_too_small` | Assembly smaller than 500 kb, or empty                                                              |
-| `qc_gate_failed`     | CheckM2 completeness / contamination outside the thresholds                                         |
-| `not_s_aureus`       | fastANI to NCTC 8325 below `--species_ani_threshold`; best Mash hit given                           |
-| `typing_incomplete`  | A typing or AMR step failed, so the sample has no summary row                                       |
-| `not_in_tree`        | In the summary but excluded from the phylogeny (Snippy failure or >80% unaligned, Panaroo <500 CDS) |
+| Stage                        | Meaning                                                                                             |
+| ---------------------------- | --------------------------------------------------------------------------------------------------- |
+| `assembly_failed`            | The assembler produced no contigs (its error is ignored so the run continues)                       |
+| `assembly_size_out_of_range` | Assembly length outside `--min_assembly_size`..`--max_assembly_size` (2.5–3.2 Mb), or empty         |
+| `qc_gate_failed`             | CheckM2 completeness / contamination outside the thresholds                                         |
+| `not_s_aureus`               | fastANI to NCTC 8325 below `--species_ani_threshold`; best Mash hit given                           |
+| `typing_incomplete`          | A typing or AMR step failed, so the sample has no summary row                                       |
+| `not_in_tree`                | In the summary but excluded from the phylogeny (Snippy failure or >80% unaligned, Panaroo <500 CDS) |
+
+Kept samples are **flagged, not dropped**, when the trimmed Illumina depth is below `--min_depth_short` (30x), the ONT depth below `--min_depth_long` (20x), the assembly has more than `--max_contigs` (500) contigs, or its N50 is below `--min_n50` (10 kb). Flags appear in `sample_status.tsv`, in the run report and as a `qc_flags` column in `summary/combined_summary.tsv` (e.g. `low_depth_short:23x;contigs:1096;n50:5.2kb`).
 
 ### figures/
 

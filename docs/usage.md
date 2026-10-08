@@ -216,14 +216,20 @@ work/               # Nextflow working files
 
 ### Quality control
 
-| Parameter                 | Default | Description                                                                |
-| ------------------------- | ------- | -------------------------------------------------------------------------- |
-| `--min_completeness`      | `90`    | Minimum CheckM2 completeness (%) to pass QC gate                           |
-| `--max_contamination`     | `5`     | Maximum CheckM2 contamination (%) to pass QC gate                          |
-| `--skip_qc_gate`          | `false` | Skip CheckM2 (and its ~3 GB database) and the QC gate; all samples proceed |
-| `--species_ani_threshold` | `95.0`  | Minimum ANI (%) to NCTC 8325 for _S. aureus_ species confirmation          |
-| `--skip_species_qc`       | `false` | Skip fastANI species confirmation step                                     |
-| `--assembler`             | `skesa` | Short-read assembler: `skesa` (default) or `spades`                        |
+| Parameter                 | Default   | Description                                                                |
+| ------------------------- | --------- | -------------------------------------------------------------------------- |
+| `--min_completeness`      | `90`      | Minimum CheckM2 completeness (%) to pass QC gate                           |
+| `--max_contamination`     | `5`       | Maximum CheckM2 contamination (%) to pass QC gate                          |
+| `--skip_qc_gate`          | `false`   | Skip CheckM2 (and its ~3 GB database) and the QC gate; all samples proceed |
+| `--min_assembly_size`     | `2500000` | Drop assemblies shorter than this (bp)                                     |
+| `--max_assembly_size`     | `3200000` | Drop assemblies longer than this (bp)                                      |
+| `--min_depth_short`       | `30`      | Flag (not drop) samples with trimmed Illumina depth below this             |
+| `--min_depth_long`        | `20`      | Flag samples with ONT depth below this                                     |
+| `--max_contigs`           | `500`     | Flag assemblies with more contigs than this                                |
+| `--min_n50`               | `10000`   | Flag assemblies with N50 below this (bp)                                   |
+| `--species_ani_threshold` | `95.0`    | Minimum ANI (%) to NCTC 8325 for _S. aureus_ species confirmation          |
+| `--skip_species_qc`       | `false`   | Skip fastANI species confirmation step                                     |
+| `--assembler`             | `skesa`   | Short-read assembler: `skesa` (default) or `spades`                        |
 
 ### Long reads
 

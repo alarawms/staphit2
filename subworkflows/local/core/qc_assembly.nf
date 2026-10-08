@@ -78,19 +78,14 @@ workflow QC_ASSEMBLY {
 
     ch_primary_scaffolds = ch_short_scaffolds.mix(DRAGONFLYE.out.scaffolds)
 
-    ch_skesa_branched = ch_primary_scaffolds.branch {
-        _meta, fasta ->
-            pass: fasta.size() > 500000
-            fail: true
-    }
-    ch_assemblies = ch_skesa_branched.pass
+    // Assembly gate: S. aureus genomes are ~2.7-2.9 Mb; drop assemblies outside
+    // --min_assembly_size .. --max_assembly_size (sequence length, not file size)
+    ch_assembly_lengths = ch_primary_scaffolds.map { meta, fasta -> [ meta, assemblyLength(fasta) ] }
 
-    // Log dropped samples (assembly too small)
-    ch_assembly_dropped = ch_skesa_branched.fail
-        .map { meta, fasta -> "${meta.id}\tassembly_too_small\t${fasta.size()}" }
-        .collect()
-        .map { lines -> lines.join('\n') }
-        .ifEmpty('')
+    ch_assemblies = ch_primary_scaffolds
+        .join(ch_assembly_lengths)
+        .filter { _meta, _fasta, len -> len >= params.min_assembly_size && len <= params.max_assembly_size }
+        .map { meta, fasta, _len -> [ meta, fasta ] }
 
     //
     // MODULE: Assembly QC with QUAST
@@ -158,6 +153,13 @@ workflow QC_ASSEMBLY {
     qc_report         = ch_qc_report            // channel: path(qc_report.tsv)
     qc_passed         = ch_qc_passed            // channel: path(passed_samples.txt)
     qc_failed         = ch_qc_failed            // channel: path(failed_samples.txt)
-    assembly_dropped  = ch_assembly_dropped     // channel: val(string) — TSV of samples dropped by size filter
+    assembly_lengths  = ch_assembly_lengths     // channel: [ val(meta), val(bp) ]
     versions          = ch_versions             // channel: [ path(versions.yml) ]
+}
+
+// Total sequence length of a FASTA file (bp)
+def assemblyLength(fasta) {
+    def n = 0L
+    fasta.eachLine { line -> if (!line.startsWith('>')) { n += line.trim().length() } }
+    return n
 }

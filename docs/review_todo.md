@@ -36,7 +36,7 @@ A1–A11: branch `chore/nf-core-standards`. Notes:
 - [x] **B1** Reproducibility: every tool and database version is in `pipeline_info/staphit2_software_mqc_versions.yml` and MultiQC (A1–A3); all containers pinned; `tests/test_profile.nf.test` snapshots the versions so any change shows up in CI
 - [ ] **B2** Within-species contamination check (mixed _S. aureus_ cultures; e.g. ConFindr or allele-ratio from read mapping) — e.g. SAMEA114860523: 1,192x, 579 contigs, passed QC
 - [ ] **B3** Lineage-aware outbreak clustering (cgMLST on by default, or within-lineage mapping + recombination masking) instead of one cross-lineage core alignment / NCTC8325 mapping
-- [ ] **B4** Stricter assembly gate: genome size ~2.5–3.2 Mb, minimum depth (short ~30x, ONT ~20–30x), contig/N50 flags
+- [x] **B4** Assembly gate: drop outside 2.5–3.2 Mb (`--min/max_assembly_size`, replaces the 500 kb filter); flag (keep) low depth (<30x Illumina, <20x ONT), >500 contigs, N50 <10 kb: `qc_flags` in the summary, `flags` in `sample_status.tsv`
 - [x] **B5** `report/sample_status.tsv` + _Sample Status_ report section: every input sample with the stage and reason it was dropped (on the 703-sample run: 17 QC gate, 1 non-_S. aureus_, 1 empty assembly)
 - [ ] **B6** ONT-only polishing: Medaka by default with model from the FASTQ header; flag truncated genes
 - [ ] **B7** Assembler choice: SKESA fragments repeat regions (246/684 split SCCmec cassettes); evaluate SPAdes/shovill

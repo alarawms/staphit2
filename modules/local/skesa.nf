@@ -17,6 +17,6 @@ process SKESA {
 
     stub:
     """
-    { echo ">contig_1"; head -c 600000 /dev/zero | tr "\\0" A; echo; } > ${meta.id}.scaffolds.fasta   # passes the 500 kb assembly-size filter
+    { echo ">contig_1"; head -c 2800000 /dev/zero | tr "\\0" A; echo; } > ${meta.id}.scaffolds.fasta   # passes the 2.5-3.2 Mb assembly-size gate
     """
 }
