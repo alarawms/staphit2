@@ -10,9 +10,7 @@
             "type": "object",
             "fa_icon": "fas fa-terminal",
             "description": "Define where the pipeline should find input data and save output data.",
-            "required": [
-                "outdir"
-            ],
+            "required": ["outdir"],
             "properties": {
                 "input": {
                     "type": "string",
@@ -151,14 +149,7 @@
                     "description": "Method used to save pipeline results to output directory.",
                     "help_text": "The Nextflow `publishDir` option specifies which intermediate files should be saved to the output directory. This option tells the pipeline what method should be used to move these files. See [Nextflow docs](https://www.nextflow.io/docs/latest/process.html#publishdir) for details.",
                     "fa_icon": "fas fa-copy",
-                    "enum": [
-                        "symlink",
-                        "rellink",
-                        "link",
-                        "copy",
-                        "copyNoFollow",
-                        "move"
-                    ],
+                    "enum": ["symlink", "rellink", "link", "copy", "copyNoFollow", "move"],
                     "hidden": true
                 },
                 "email_on_fail": {
@@ -235,10 +226,7 @@
                     "hidden": true
                 },
                 "help": {
-                    "type": [
-                        "boolean",
-                        "string"
-                    ],
+                    "type": ["boolean", "string"],
                     "description": "Display the help message."
                 },
                 "help_full": {
@@ -313,10 +301,7 @@
                     "type": "string",
                     "default": "skesa",
                     "description": "Assembly tool: 'skesa' (default, fast, deterministic) or 'spades' (metaSPAdes, better for complex genomes).",
-                    "enum": [
-                        "skesa",
-                        "spades"
-                    ]
+                    "enum": ["skesa", "spades"]
                 },
                 "skip_qc_gate": {
                     "type": "boolean",
@@ -350,10 +335,40 @@
                     "exists": true,
                     "description": "Local Mash RefSeq sketch (refseq.genomes.k21s1000.msh). Omit to download"
                 },
+                "checkm2_db": {
+                    "type": "string",
+                    "format": "file-path",
+                    "exists": true,
+                    "description": "Local CheckM2 DIAMOND database (uniref100.KO.1.dmnd). Omit to download"
+                },
+                "amrfinder_db": {
+                    "type": "string",
+                    "format": "file-path",
+                    "exists": true,
+                    "description": "Local AMRFinderPlus database (amrfinderdb.tar.gz from amrfinder_update). Omit to download"
+                },
+                "resfinder_db_commit": {
+                    "type": "string",
+                    "default": "eecf0aa207594fe6d51badf808473de62b28cb06",
+                    "pattern": "^[0-9a-f]{7,40}$",
+                    "description": "ResFinder database git commit (bitbucket.org/genomicepidemiology/resfinder_db) used for KMA"
+                },
                 "sccmec_container": {
                     "type": "string",
-                    "default": "docker.io/alarawms/sccmec_typer:latest",
+                    "default": "docker.io/alarawms/sccmec_typer@sha256:f4ba10aeae3b9dd1d974e13eee14db98bef8a2d1ab556a17d1afe6a6e6711dfd",
                     "description": "Container image for SCCmec typing (sccmec_typer); override to test a typer build"
+                },
+                "sccmec_best_fit": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Promote the SCCmec estimator's best candidate when the type is Unknown, labelled 'Type X (est.)'"
+                },
+                "sccmec_min_score": {
+                    "type": "number",
+                    "default": 0.6,
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Minimum estimator score for --sccmec_best_fit promotion"
                 }
             }
         },
@@ -379,20 +394,13 @@
                 "phylo_method": {
                     "type": "string",
                     "default": "both",
-                    "enum": [
-                        "panaroo",
-                        "snippy",
-                        "both"
-                    ],
+                    "enum": ["panaroo", "snippy", "both"],
                     "description": "Phylogeny method: panaroo (tree), snippy (clustering), or both (recommended)."
                 },
                 "tree_builder": {
                     "type": "string",
                     "default": "iqtree",
-                    "enum": [
-                        "iqtree",
-                        "fasttree"
-                    ],
+                    "enum": ["iqtree", "fasttree"],
                     "description": "Tree building tool: IQ-TREE (accurate) or FastTree (fast)."
                 },
                 "reference": {
@@ -403,11 +411,7 @@
                 "panaroo_clean": {
                     "type": "string",
                     "default": "moderate",
-                    "enum": [
-                        "strict",
-                        "moderate",
-                        "sensitive"
-                    ],
+                    "enum": ["strict", "moderate", "sensitive"],
                     "description": "Panaroo clean mode."
                 },
                 "panaroo_threshold": {
@@ -420,10 +424,7 @@
                 "panaroo_aligner": {
                     "type": "string",
                     "default": "mafft",
-                    "enum": [
-                        "mafft",
-                        "clustal"
-                    ],
+                    "enum": ["mafft", "clustal"],
                     "description": "Panaroo core gene aligner."
                 },
                 "snippy_mincov": {
@@ -453,6 +454,11 @@
                 "panaroo_entropy_filter": {
                     "type": "number",
                     "description": "BMGE entropy filter (0.0-1.0). Null for auto Tukey method."
+                },
+                "plot_tree": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Draw the annotated tree (PDF + SVG); disable with --plot_tree false"
                 }
             }
         },
@@ -521,12 +527,7 @@
                 "fetch_source": {
                     "type": "string",
                     "default": "all",
-                    "enum": [
-                        "all",
-                        "pubmlst",
-                        "ncbi",
-                        "ena"
-                    ],
+                    "enum": ["all", "pubmlst", "ncbi", "ena"],
                     "description": "Metadata sources to query (default: all).",
                     "fa_icon": "fas fa-database"
                 },

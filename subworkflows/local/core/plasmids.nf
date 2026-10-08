@@ -23,7 +23,7 @@ workflow PLASMID_ANALYSIS {
     MOB_RECON ( ch_assemblies, MOB_INIT.out.db.collect() )
 
     PLASMID_SUMMARY (
-        MOB_RECON.out.full_output.map { meta, dir -> dir }.collect()
+        MOB_RECON.out.full_output.map { _meta, dir -> dir }.collect()
     )
 
     emit:

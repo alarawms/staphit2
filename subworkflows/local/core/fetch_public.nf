@@ -4,12 +4,12 @@ include { SRA_FETCH     } from '../../../modules/local/sra_fetch'
 workflow FETCH_PUBLIC {
 
     main:
-    PUBMLST_FETCH(Channel.value(file("${projectDir}/bin/pubmlst_fetch.py")))
+    PUBMLST_FETCH(channel.value(file("${projectDir}/bin/pubmlst_fetch.py")))
 
     ch_accessions = PUBMLST_FETCH.out.accessions
         .splitText()
-        .map { it.trim() }
-        .filter { it }
+        .map { s -> s.trim() }
+        .filter { s -> s }
 
     SRA_FETCH ( ch_accessions )
 
@@ -19,5 +19,5 @@ workflow FETCH_PUBLIC {
     emit:
     reads    = ch_reads
     metadata = PUBMLST_FETCH.out.metadata
-    versions = Channel.empty()
+    versions = channel.empty()
 }

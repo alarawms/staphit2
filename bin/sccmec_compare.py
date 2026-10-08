@@ -303,7 +303,7 @@ def cmd_coverage(outdir, groups_tsv):
     for ext in ('pdf', 'png'):
         fig.savefig(f'{outdir}/sccmec_read_coverage.{ext}', dpi=180 if ext == 'png' else None)
     open(f'{outdir}/sccmec_gene_coverage.tsv', 'w').write('\n'.join(table) + '\n')
-    print(f'wrote {outdir}/sccmec_read_coverage.{{pdf,png}} and sccmec_gene_coverage.tsv')
+    print(f'wrote {outdir}/sccmec_read_coverage.pdf/.png and sccmec_gene_coverage.tsv')
 
 
 QUAL_LINES = ['#1b9e77', '#d95f02', '#7570b3', '#e7298a', '#66a61e', '#e6ab02']
@@ -402,7 +402,7 @@ def cmd_plot(outdir, links_csv, title='SCCmec region comparison'):
     for ext in ('pdf', 'png', 'svg'):
         fig.savefig(f'{outdir}/sccmec_comparison.{ext}', dpi=200 if ext == 'png' else None,
                     bbox_inches='tight')
-    print(f'wrote {outdir}/sccmec_comparison.{{pdf,png,svg}} ({len(recs)} tracks, {len(links) // 2} links)')
+    print(f'wrote {outdir}/sccmec_comparison.pdf/.png/.svg ({len(recs)} tracks, {len(links) // 2} links)')
 
 
 if __name__ == '__main__':

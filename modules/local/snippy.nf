@@ -1,8 +1,6 @@
 process SNIPPY {
     tag "$meta.id"
     label 'process_medium'
-    publishDir path: { "${params.outdir}/snippy/${meta.id}" }, mode: 'copy'   // 'link' fails across filesystems
-    errorStrategy 'ignore'
     container 'docker.io/staphb/snippy:4.6.0'
 
     input:
@@ -11,6 +9,7 @@ process SNIPPY {
 
     output:
     tuple val(meta), path("${meta.id}"), emit: results
+    tuple val("${task.process}"), val('snippy'), eval("snippy --version 2>&1 | sed 's/^snippy //'"), topic: versions, emit: versions_snippy
 
     script:
     // Long-only samples arrive as their assembly (Snippy cannot align raw ONT reads)
@@ -20,11 +19,15 @@ process SNIPPY {
     # Remove broken symlinks left by --cleanup so publishDir doesn't fail on them
     find ${meta.id} -xtype l -delete
     """
+
+    stub:
+    """
+    mkdir ${meta.id}
+    """
 }
 
 process SNIPPY_CORE {
     label 'process_high'
-    publishDir "${params.outdir}/snippy_core", mode: 'copy'
     container 'docker.io/staphb/snippy:4.6.0'
 
     input:
@@ -33,6 +36,7 @@ process SNIPPY_CORE {
 
     output:
     path "core.aln", emit: aln
+    tuple val("${task.process}"), val('snippy'), eval("snippy --version 2>&1 | sed 's/^snippy //'"), topic: versions, emit: versions_snippy
 
     script:
     """
@@ -69,5 +73,10 @@ process SNIPPY_CORE {
     fi
 
     snippy-core --ref ${reference} \$GOOD_DIRS
+    """
+
+    stub:
+    """
+    printf ">Reference\\nACGTACGT\\n>s1\\nACGTACGA\\n>s2\\nACTTACGT\\n" > core.aln
     """
 }

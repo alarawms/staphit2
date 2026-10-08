@@ -20,7 +20,7 @@ workflow SA_TYPING {
 
     main:
 
-    ch_versions = Channel.empty()
+    ch_versions = channel.empty()
 
     MLST ( ch_assemblies )
     ch_versions = ch_versions.mix(MLST.out.versions.first())

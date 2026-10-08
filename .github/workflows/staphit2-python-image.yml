@@ -1,0 +1,47 @@
+name: staphit2-python image
+
+# Builds docker/staphit2-python and pushes ghcr.io/alarawms/staphit2-python:<VERSION>
+# (VERSION file). Uses the built-in GITHUB_TOKEN; no registry secrets needed.
+# After the first push, make the package public once (GitHub > Packages > settings).
+on:
+  push:
+    branches: [main]
+    paths: ["docker/staphit2-python/**", ".github/workflows/staphit2-python-image.yml"]
+  pull_request:
+    paths: ["docker/staphit2-python/**", ".github/workflows/staphit2-python-image.yml"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version
+        id: v
+        run: echo "version=$(cat docker/staphit2-python/VERSION)" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to ghcr.io
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build (and push on main)
+        uses: docker/build-push-action@v6
+        with:
+          context: docker/staphit2-python
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ghcr.io/alarawms/staphit2-python:${{ steps.v.outputs.version }}
+
+      - name: Smoke test imports
+        run: |
+          docker buildx build --load -t staphit2-python:test docker/staphit2-python
+          docker run --rm staphit2-python:test python -c "import matplotlib, pandas, seaborn, yaml, Bio, openpyxl, pdfplumber, requests, oauthlib, toytree, toyplot"

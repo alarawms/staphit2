@@ -1,24 +1,29 @@
 process CHEWBBACA_PREP {
     label 'process_medium'
-    publishDir "${params.outdir}/cgmlst/schema", mode: 'copy'
-    container 'docker.io/ummidock/chewbbaca:latest'
+    container 'docker.io/ummidock/chewbbaca:v3.3.10'
 
     input:
     path schema_fasta_dir
 
     output:
     path "prepared_schema", emit: schema
+    tuple val("${task.process}"), val('chewbbaca'), eval("chewBBACA.py --version | sed 's/.*: //'"), topic: versions, emit: versions_chewbbaca
 
     script:
     """
     chewBBACA.py PrepExternalSchema -g ${schema_fasta_dir} -o prepared_schema --cpu ${task.cpus}
+    """
+
+    stub:
+    """
+    mkdir prepared_schema
     """
 }
 
 process CHEWBBACA_ALLELE {
     tag "$meta.id"
     label 'process_medium'
-    container 'docker.io/ummidock/chewbbaca:latest'
+    container 'docker.io/ummidock/chewbbaca:v3.3.10'
 
     input:
     tuple val(meta), path(assembly)
@@ -27,6 +32,7 @@ process CHEWBBACA_ALLELE {
     output:
     tuple val(meta), path("results/results_alleles.tsv"), emit: profile
     tuple val(meta), path("results/results_statistics.tsv"), emit: stats
+    tuple val("${task.process}"), val('chewbbaca'), eval("chewBBACA.py --version | sed 's/.*: //'"), topic: versions, emit: versions_chewbbaca
 
     script:
     """
@@ -37,12 +43,17 @@ process CHEWBBACA_ALLELE {
         mv results/results_*/* results/
     fi
     """
+
+    stub:
+    """
+    mkdir results
+    touch results/results_alleles.tsv results/results_statistics.tsv
+    """
 }
 
 process CHEWBBACA_JOIN {
     label 'process_low'
-    publishDir "${params.outdir}/cgmlst", mode: 'copy'
-    container 'docker.io/ummidock/chewbbaca:latest'
+    container 'docker.io/ummidock/chewbbaca:v3.3.10'
 
     input:
     path profiles
@@ -50,6 +61,7 @@ process CHEWBBACA_JOIN {
     output:
     path "cgmlst_profiles.tsv", emit: profiles
     path "cgmlst_stats.tsv", emit: stats
+    tuple val("${task.process}"), val('chewbbaca'), eval("chewBBACA.py --version | sed 's/.*: //'"), topic: versions, emit: versions_chewbbaca
 
     script:
     """
@@ -74,22 +86,27 @@ with open('cgmlst_profiles.tsv') as f:
         print(f'{sid}\\t{called}\\t{total - called}\\t{total}')
 " >> cgmlst_stats.tsv
     """
+
+    stub:
+    """
+    touch cgmlst_profiles.tsv cgmlst_stats.tsv
+    """
 }
 
 process CGMLST_DISTS {
     label 'process_low'
-    publishDir "${params.outdir}/cgmlst", mode: 'copy'
-    container 'docker.io/python:3.9'
+    container 'ghcr.io/alarawms/staphit2-python:1.0.0'
 
     input:
     path profiles
 
     output:
     path "cgmlst_distances.tsv"
+    tuple val("${task.process}"), val('python'), eval("python3 --version | sed 's/Python //'"), topic: versions, emit: versions_python
 
     script:
     """
-    python3 ${projectDir}/bin/staphit-cgmlst-stats ${profiles} cgmlst_distances.tsv 2>/dev/null || python3 -c "
+    staphit-cgmlst-stats ${profiles} cgmlst_distances.tsv 2>/dev/null || python3 -c "
 import csv
 with open('${profiles}') as f:
     reader = csv.DictReader(f, delimiter='\\t')
@@ -111,5 +128,10 @@ with open('cgmlst_distances.tsv', 'w') as out:
                 dists.append(str(diff))
         out.write(s1 + '\\t' + '\\t'.join(dists) + '\\n')
 "
+    """
+
+    stub:
+    """
+    touch cgmlst_distances.tsv
     """
 }

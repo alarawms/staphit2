@@ -72,7 +72,7 @@ workflow {
         error "Provide --input samplesheet.csv, or use --cc / --st to fetch public data"
     }
 
-    ch_reads = Channel.empty()
+    ch_reads = channel.empty()
 
     if (fetch_mode) {
         FETCH_PUBLIC ()

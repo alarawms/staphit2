@@ -41,7 +41,7 @@ outbreak:
     direct_transmission: 10
     outbreak: 24
     related: 50
-  estimated_mutation_rate: 2.0  # SNPs/genome/year
+  estimated_mutation_rate: 2.0 # SNPs/genome/year
 
 # Reference genomes
 references:
@@ -72,7 +72,34 @@ virulence:
       clinical_significance: "Toxic shock syndrome"
     - name: Enterotoxins
       type: gene_count
-      genes: [sea, seb, sec, sed, see, seg, seh, sei, sej, sek, sel, sem, sen, seo, sep, seq, ser, ses, selk, sell, selm, seln, selo, selp, selq]
+      genes:
+        [
+          sea,
+          seb,
+          sec,
+          sed,
+          see,
+          seg,
+          seh,
+          sei,
+          sej,
+          sek,
+          sel,
+          sem,
+          sen,
+          seo,
+          sep,
+          seq,
+          ser,
+          ses,
+          selk,
+          sell,
+          selm,
+          seln,
+          selo,
+          selp,
+          selq,
+        ]
       clinical_significance: "Staphylococcal food poisoning"
     - name: Exfoliatins
       type: presence
@@ -126,21 +153,21 @@ ast:
   vitek_cards:
     - name: AST-P580
       antibiotics:
-        - {name: Benzylpenicillin, abbreviations: [PEN, PENIC], class: Beta-lactam}
-        - {name: Cefoxitin, abbreviations: [CEF, FOX], class: Beta-lactam, method: Screen}
-        - {name: Oxacillin, abbreviations: [OXA], class: Beta-lactam}
-        - {name: Gentamicin, abbreviations: [GEN, GENTA], class: Aminoglycoside}
-        - {name: Tobramycin, abbreviations: [TOB], class: Aminoglycoside}
-        - {name: Levofloxacin, abbreviations: [LEV], class: Fluoroquinolone}
-        - {name: Moxifloxacin, abbreviations: [MOX, MXF], class: Fluoroquinolone}
-        - {name: Erythromycin, abbreviations: [ERY], class: Macrolide}
-        - {name: Clindamycin, abbreviations: [CLIN, CLI], class: Lincosamide}
-        - {name: Linezolid, abbreviations: [LIN, LZD, LINEZ], class: Oxazolidinone}
-        - {name: Teicoplanin, abbreviations: [TEI], class: Glycopeptide}
-        - {name: Vancomycin, abbreviations: [VAN], class: Glycopeptide}
-        - {name: Tetracycline, abbreviations: [TET, TETRA], class: Tetracycline}
-        - {name: Tigecycline, abbreviations: [TIG, TGC], class: Glycylcycline}
-        - {name: Nitrofurantoin, abbreviations: [NIT], class: Nitrofuran}
-        - {name: Fusidic Acid, abbreviations: [FUS], class: Steroid}
-        - {name: Rifampicin, abbreviations: [RIF, RIFA], class: Rifamycin}
-        - {name: "Trimethoprim/Sulfamethoxazole", abbreviations: [TRI, TMP, SXT], class: Folate inhibitor}
+        - { name: Benzylpenicillin, abbreviations: [PEN, PENIC], class: Beta-lactam }
+        - { name: Cefoxitin, abbreviations: [CEF, FOX], class: Beta-lactam, method: Screen }
+        - { name: Oxacillin, abbreviations: [OXA], class: Beta-lactam }
+        - { name: Gentamicin, abbreviations: [GEN, GENTA], class: Aminoglycoside }
+        - { name: Tobramycin, abbreviations: [TOB], class: Aminoglycoside }
+        - { name: Levofloxacin, abbreviations: [LEV], class: Fluoroquinolone }
+        - { name: Moxifloxacin, abbreviations: [MOX, MXF], class: Fluoroquinolone }
+        - { name: Erythromycin, abbreviations: [ERY], class: Macrolide }
+        - { name: Clindamycin, abbreviations: [CLIN, CLI], class: Lincosamide }
+        - { name: Linezolid, abbreviations: [LIN, LZD, LINEZ], class: Oxazolidinone }
+        - { name: Teicoplanin, abbreviations: [TEI], class: Glycopeptide }
+        - { name: Vancomycin, abbreviations: [VAN], class: Glycopeptide }
+        - { name: Tetracycline, abbreviations: [TET, TETRA], class: Tetracycline }
+        - { name: Tigecycline, abbreviations: [TIG, TGC], class: Glycylcycline }
+        - { name: Nitrofurantoin, abbreviations: [NIT], class: Nitrofuran }
+        - { name: Fusidic Acid, abbreviations: [FUS], class: Steroid }
+        - { name: Rifampicin, abbreviations: [RIF, RIFA], class: Rifamycin }
+        - { name: "Trimethoprim/Sulfamethoxazole", abbreviations: [TRI, TMP, SXT], class: Folate inhibitor }

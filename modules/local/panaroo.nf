@@ -1,7 +1,5 @@
 process PANAROO {
     label 'process_high'
-    publishDir "${params.outdir}/panaroo", mode: 'copy'
-    errorStrategy 'ignore'
     container 'docker.io/staphb/panaroo:1.3.4'
 
     input:
@@ -11,6 +9,7 @@ process PANAROO {
     path "core_gene_alignment.aln", optional: true, emit: aln
     path "gene_presence_absence.csv", optional: true
     path "pan_genome_reference.fa", optional: true
+    tuple val("${task.process}"), val('panaroo'), eval("panaroo --version 2>&1 | sed 's/^panaroo //'"), topic: versions, emit: versions_panaroo
 
     script:
     """
@@ -35,5 +34,11 @@ process PANAROO {
         -f ${params.panaroo_family_threshold} \
         ${params.panaroo_entropy_filter ? "--core_entropy_filter ${params.panaroo_entropy_filter}" : ''} \
         -t ${task.cpus}
+    """
+
+    stub:
+    """
+    printf ">Reference\\nACGTACGT\\n>s1\\nACGTACGA\\n>s2\\nACTTACGT\\n" > core_gene_alignment.aln
+    touch gene_presence_absence.csv pan_genome_reference.fa
     """
 }

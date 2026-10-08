@@ -10,7 +10,7 @@
 
 ## Introduction
 
-**alarawms/staphit2** is an nf-core-compatible bioinformatics pipeline for comprehensive MRSA (*Staphylococcus aureus*) genomic surveillance. It takes raw Illumina paired-end reads and produces assembly-based typing, antimicrobial resistance profiling, structured virulence characterization, plasmid reconstruction, phylogenetic analysis, outbreak cluster detection, and automated reporting.
+**alarawms/staphit2** is an nf-core-compatible bioinformatics pipeline for comprehensive MRSA (_Staphylococcus aureus_) genomic surveillance. It takes raw Illumina paired-end reads and produces assembly-based typing, antimicrobial resistance profiling, structured virulence characterization, plasmid reconstruction, phylogenetic analysis, outbreak cluster detection, and automated reporting.
 
 Built on a species-agnostic core architecture, the pipeline is designed to support additional bacterial pathogens in the future via species descriptor files.
 
@@ -35,29 +35,29 @@ Reads → TrimGalore → Rasusa (subsampling) → FastQC
 
 ### Analysis steps
 
-| Step | Tool | Description |
-|------|------|-------------|
-| Read QC | TrimGalore + FastQC | Adapter trimming and quality assessment |
-| Read subsampling | Rasusa | Normalize coverage to target depth (default: 100x) |
-| Assembly | SKESA or SPAdes | *De novo* genome assembly |
-| Assembly QC | QUAST + CheckM2 | Assembly metrics + completeness/contamination check |
-| MLST | mlst | 7-locus multi-locus sequence typing |
-| spa typing | spaTyper | *spa* gene repeat typing |
-| SCCmec typing | SCCmec Typer | Staphylococcal cassette chromosome *mec* classification |
-| agr typing | agr Typer | Accessory gene regulator group assignment |
-| Species ID | Mash | Genomic distance-based species confirmation |
-| AMR genes | AMRFinderPlus + ABRicate + KMA | Assembly- and read-based resistance detection |
-| Point mutations | AMRFinderPlus POINT | gyrA, parC, rpoB, fusA mutations with predicted phenotype |
-| Virulence profiling | staphit-virulence | PVL, TSST-1, IEC type, enterotoxins, operon completeness |
-| Plasmid reconstruction | MOB-suite | Full plasmids with mobility and gene-to-replicon assignment |
-| Pangenome | Panaroo | Core genome alignment |
-| Phylogenetics | IQ-TREE or FastTree | Maximum-likelihood tree |
-| Bayesian phylodynamics | BEAST2 (optional) | Time-calibrated Bayesian phylogeny with strict clock and coalescent prior |
-| SNP distances | SNP-dists | Pairwise SNP distance matrix |
-| Outbreak clustering | staphit-cluster | Tiered clustering (≤5/15/40 SNPs) with epi annotation |
-| Reporting | staphit-report | Automated Markdown run report |
-| Visualization | staphit-visualize | Publication-ready figures |
-| Dashboard | staphit-dashboard | Interactive Plotly Dash surveillance dashboard (optional) |
+| Step                   | Tool                           | Description                                                               |
+| ---------------------- | ------------------------------ | ------------------------------------------------------------------------- |
+| Read QC                | TrimGalore + FastQC            | Adapter trimming and quality assessment                                   |
+| Read subsampling       | Rasusa                         | Normalize coverage to target depth (default: 100x)                        |
+| Assembly               | SKESA or SPAdes                | _De novo_ genome assembly                                                 |
+| Assembly QC            | QUAST + CheckM2                | Assembly metrics + completeness/contamination check                       |
+| MLST                   | mlst                           | 7-locus multi-locus sequence typing                                       |
+| spa typing             | spaTyper                       | _spa_ gene repeat typing                                                  |
+| SCCmec typing          | SCCmec Typer                   | Staphylococcal cassette chromosome _mec_ classification                   |
+| agr typing             | agr Typer                      | Accessory gene regulator group assignment                                 |
+| Species ID             | Mash                           | Genomic distance-based species confirmation                               |
+| AMR genes              | AMRFinderPlus + ABRicate + KMA | Assembly- and read-based resistance detection                             |
+| Point mutations        | AMRFinderPlus POINT            | gyrA, parC, rpoB, fusA mutations with predicted phenotype                 |
+| Virulence profiling    | staphit-virulence              | PVL, TSST-1, IEC type, enterotoxins, operon completeness                  |
+| Plasmid reconstruction | MOB-suite                      | Full plasmids with mobility and gene-to-replicon assignment               |
+| Pangenome              | Panaroo                        | Core genome alignment                                                     |
+| Phylogenetics          | IQ-TREE or FastTree            | Maximum-likelihood tree                                                   |
+| Bayesian phylodynamics | BEAST2 (optional)              | Time-calibrated Bayesian phylogeny with strict clock and coalescent prior |
+| SNP distances          | SNP-dists                      | Pairwise SNP distance matrix                                              |
+| Outbreak clustering    | staphit-cluster                | Tiered clustering (≤5/15/40 SNPs) with epi annotation                     |
+| Reporting              | staphit-report                 | Automated Markdown run report                                             |
+| Visualization          | staphit-visualize              | Publication-ready figures                                                 |
+| Dashboard              | staphit-dashboard              | Interactive Plotly Dash surveillance dashboard (optional)                 |
 
 ## Usage
 
@@ -154,7 +154,7 @@ python bin/staphit-metadata convert --from-external-xlsx clinical.xlsx \
 
 ### Fetching public genomes (pubmlst_fetch.py + nf-core/fetchngs)
 
-`bin/pubmlst_fetch.py` retrieves public *S. aureus* WGS records by ST, clonal complex, country, continent, host, or year from three sources in parallel: PubMLST BIGSdb, NCBI Entrez SRA, and ENA Portal.
+`bin/pubmlst_fetch.py` retrieves public _S. aureus_ WGS records by ST, clonal complex, country, continent, host, or year from three sources in parallel: PubMLST BIGSdb, NCBI Entrez SRA, and ENA Portal.
 
 **Step 1 — fetch metadata and accession list**
 
@@ -180,14 +180,14 @@ python bin/pubmlst_fetch.py \
 
 Key flags:
 
-| Flag | Description |
-|------|-------------|
-| `--cc CC` | Clonal complex — expands to all member STs via PubMLST |
-| `--st ST[,ST2,…]` | One or more exact sequence types |
-| `--source all\|pubmlst\|ncbi\|ena` | Data sources to query (default: all) |
-| `--sra-only` | Discard isolates without a public run accession |
-| `--accessions FILE` | One SRA/ENA run ID per line — input for nf-core/fetchngs |
-| `--out FILE` | Full metadata TSV with provenance fields |
+| Flag                               | Description                                              |
+| ---------------------------------- | -------------------------------------------------------- |
+| `--cc CC`                          | Clonal complex — expands to all member STs via PubMLST   |
+| `--st ST[,ST2,…]`                  | One or more exact sequence types                         |
+| `--source all\|pubmlst\|ncbi\|ena` | Data sources to query (default: all)                     |
+| `--sra-only`                       | Discard isolates without a public run accession          |
+| `--accessions FILE`                | One SRA/ENA run ID per line — input for nf-core/fetchngs |
+| `--out FILE`                       | Full metadata TSV with provenance fields                 |
 
 **Step 2 — download FASTQs with nf-core/fetchngs**
 
@@ -239,18 +239,18 @@ The metadata TSV is optional; if omitted the script looks for `<run_name>_metada
 
 `bin/export_itol.py` generates 10 numbered annotation files ready to drag into [iTOL](https://itol.embl.de) after uploading your tree:
 
-| File | Track | Type |
-|------|-------|------|
-| `01_country_symbols.txt` | Country | Symbol (circle, per-country colour) |
-| `02_year_labels.txt` | Year | Text label |
-| `03_st_labels.txt` | MLST ST | Text label |
-| `04_spa_labels.txt` | spa type | Text label |
-| `05_sccmec_strip.txt` | SCCmec | Colour strip + label |
-| `06_agr_strip.txt` | agr group | Colour strip + label |
-| `07_virulence_binary.txt` | PVL / TSST / mecA | Binary (3 columns) |
-| `08_amr_count_bar.txt` | AMR gene count | Simple bar |
-| `09_amr_top5_binary.txt` | Top 5 AMR genes | Binary (auto-detected) |
-| `10_outbreak_strip.txt` | Outbreak cluster | Colour strip + label |
+| File                      | Track             | Type                                |
+| ------------------------- | ----------------- | ----------------------------------- |
+| `01_country_symbols.txt`  | Country           | Symbol (circle, per-country colour) |
+| `02_year_labels.txt`      | Year              | Text label                          |
+| `03_st_labels.txt`        | MLST ST           | Text label                          |
+| `04_spa_labels.txt`       | spa type          | Text label                          |
+| `05_sccmec_strip.txt`     | SCCmec            | Colour strip + label                |
+| `06_agr_strip.txt`        | agr group         | Colour strip + label                |
+| `07_virulence_binary.txt` | PVL / TSST / mecA | Binary (3 columns)                  |
+| `08_amr_count_bar.txt`    | AMR gene count    | Simple bar                          |
+| `09_amr_top5_binary.txt`  | Top 5 AMR genes   | Binary (auto-detected)              |
+| `10_outbreak_strip.txt`   | Outbreak cluster  | Colour strip + label                |
 
 ```bash
 python bin/export_itol.py results/cc97 cc97 cc97_metadata.tsv
@@ -297,49 +297,49 @@ Failures are non-fatal: the script exits 0 and writes a `PLOT_TREE_FAILED` file 
 
 ## Parameters
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| **Input/Output** | | |
-| `--input` | | Samplesheet CSV. Can be combined with `--cc`/`--st` to mix local and fetched samples |
-| `--outdir` | `results` | Output directory |
-| `--metadata` | | Sample metadata TSV (PHA4GE schema; provides dates for BEAST2) |
-| `--antibiogram` | | Antibiogram CSV (NCBI long format) |
-| **Public data fetch (--cc / --st mode)** | | |
-| `--cc` | | Clonal complex to fetch (e.g. `97`). Expands to all member STs via PubMLST |
-| `--st` | | Sequence type(s), comma-separated (e.g. `97` or `97,1153`) |
-| `--fetch_source` | `all` | Metadata sources: `all`, `pubmlst`, `ncbi`, `ena` |
-| `--fetch_country` | | Filter by country (e.g. `Saudi Arabia`) |
-| `--fetch_continent` | | Filter by continent: `europe`, `asia`, `africa`, `americas` |
-| `--fetch_host` | | Filter by host species (e.g. `Homo sapiens`) |
-| `--fetch_year_from` | | Earliest isolation year |
-| `--fetch_year_to` | | Latest isolation year |
-| `--fetch_max` | | Cap number of downloads (useful for pilot runs) |
-| **Assembly** | | |
-| `--genome_size` | `2800000` | Expected genome size for read subsampling |
-| `--target_depth` | `100` | Target coverage for Rasusa |
-| **QC** | | |
-| `--min_completeness` | `90` | CheckM2 minimum completeness (%) |
-| `--max_contamination` | `5` | CheckM2 maximum contamination (%) |
-| `--skip_qc_gate` | `false` | Skip CheckM2 quality filtering |
-| **Typing** | | |
-| `--sccmec_viz` | `false` | Generate SCCmec SVG/HTML element maps |
-| `--sccmec_best_fit` | `true` | Use best-fit SCCmec assignment to resolve ambiguous/composite cassettes |
-| `--sccmec_min_score` | `0.6` | Minimum estimate score for best-fit assignment (lower = more permissive) |
-| **Phylogenetics** | | |
-| `--phylo_method` | `panaroo` | `panaroo` (pangenome) or `snippy` (reference-based) |
-| `--tree_builder` | `iqtree` | `iqtree` or `fasttree` |
-| `--reference` | | Reference genome for snippy (GenBank format) |
-| `--panaroo_clean` | `moderate` | Panaroo clean mode: `strict`, `moderate`, `sensitive` |
-| `--panaroo_threshold` | `0.95` | Core genome threshold |
-| `--snippy_mincov` | `10` | Snippy minimum read depth |
-| `--snippy_minqual` | `100` | Snippy minimum mapping quality |
-| **BEAST2 Bayesian phylodynamics** | | |
-| `--use_beast` | `false` | Enable BEAST2 time-calibrated Bayesian phylogeny (requires `--phylo_method snippy` or `both`) |
-| `--beast_chain_length` | `10000000` | MCMC chain length (steps) |
-| `--beast_log_every` | `1000` | Log frequency (sample every N steps) |
-| **Clustering** | | |
-| `--cluster_snp_tiers` | `5,15,40` | SNP thresholds: direct, outbreak, related |
-| `--cluster_cgmlst_tiers` | `10,24,50` | cgMLST thresholds |
+| Parameter                                | Default    | Description                                                                                   |
+| ---------------------------------------- | ---------- | --------------------------------------------------------------------------------------------- |
+| **Input/Output**                         |            |                                                                                               |
+| `--input`                                |            | Samplesheet CSV. Can be combined with `--cc`/`--st` to mix local and fetched samples          |
+| `--outdir`                               | `results`  | Output directory                                                                              |
+| `--metadata`                             |            | Sample metadata TSV (PHA4GE schema; provides dates for BEAST2)                                |
+| `--antibiogram`                          |            | Antibiogram CSV (NCBI long format)                                                            |
+| **Public data fetch (--cc / --st mode)** |            |                                                                                               |
+| `--cc`                                   |            | Clonal complex to fetch (e.g. `97`). Expands to all member STs via PubMLST                    |
+| `--st`                                   |            | Sequence type(s), comma-separated (e.g. `97` or `97,1153`)                                    |
+| `--fetch_source`                         | `all`      | Metadata sources: `all`, `pubmlst`, `ncbi`, `ena`                                             |
+| `--fetch_country`                        |            | Filter by country (e.g. `Saudi Arabia`)                                                       |
+| `--fetch_continent`                      |            | Filter by continent: `europe`, `asia`, `africa`, `americas`                                   |
+| `--fetch_host`                           |            | Filter by host species (e.g. `Homo sapiens`)                                                  |
+| `--fetch_year_from`                      |            | Earliest isolation year                                                                       |
+| `--fetch_year_to`                        |            | Latest isolation year                                                                         |
+| `--fetch_max`                            |            | Cap number of downloads (useful for pilot runs)                                               |
+| **Assembly**                             |            |                                                                                               |
+| `--genome_size`                          | `2800000`  | Expected genome size for read subsampling                                                     |
+| `--target_depth`                         | `100`      | Target coverage for Rasusa                                                                    |
+| **QC**                                   |            |                                                                                               |
+| `--min_completeness`                     | `90`       | CheckM2 minimum completeness (%)                                                              |
+| `--max_contamination`                    | `5`        | CheckM2 maximum contamination (%)                                                             |
+| `--skip_qc_gate`                         | `false`    | Skip CheckM2 quality filtering                                                                |
+| **Typing**                               |            |                                                                                               |
+| `--sccmec_viz`                           | `false`    | Generate SCCmec SVG/HTML element maps                                                         |
+| `--sccmec_best_fit`                      | `true`     | Use best-fit SCCmec assignment to resolve ambiguous/composite cassettes                       |
+| `--sccmec_min_score`                     | `0.6`      | Minimum estimate score for best-fit assignment (lower = more permissive)                      |
+| **Phylogenetics**                        |            |                                                                                               |
+| `--phylo_method`                         | `panaroo`  | `panaroo` (pangenome) or `snippy` (reference-based)                                           |
+| `--tree_builder`                         | `iqtree`   | `iqtree` or `fasttree`                                                                        |
+| `--reference`                            |            | Reference genome for snippy (GenBank format)                                                  |
+| `--panaroo_clean`                        | `moderate` | Panaroo clean mode: `strict`, `moderate`, `sensitive`                                         |
+| `--panaroo_threshold`                    | `0.95`     | Core genome threshold                                                                         |
+| `--snippy_mincov`                        | `10`       | Snippy minimum read depth                                                                     |
+| `--snippy_minqual`                       | `100`      | Snippy minimum mapping quality                                                                |
+| **BEAST2 Bayesian phylodynamics**        |            |                                                                                               |
+| `--use_beast`                            | `false`    | Enable BEAST2 time-calibrated Bayesian phylogeny (requires `--phylo_method snippy` or `both`) |
+| `--beast_chain_length`                   | `10000000` | MCMC chain length (steps)                                                                     |
+| `--beast_log_every`                      | `1000`     | Log frequency (sample every N steps)                                                          |
+| **Clustering**                           |            |                                                                                               |
+| `--cluster_snp_tiers`                    | `5,15,40`  | SNP thresholds: direct, outbreak, related                                                     |
+| `--cluster_cgmlst_tiers`                 | `10,24,50` | cgMLST thresholds                                                                             |
 
 ## BEAST2 Bayesian phylodynamics
 
@@ -366,18 +366,18 @@ nextflow run alarawms/staphit2 \
 
 **Optional tuning:**
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
+| Parameter              | Default    | Description                                                                   |
+| ---------------------- | ---------- | ----------------------------------------------------------------------------- |
 | `--beast_chain_length` | `10000000` | Total MCMC steps (increase for better convergence; check ESS > 200 in Tracer) |
-| `--beast_log_every` | `1000` | Logging interval (lower = larger files but finer posterior sampling) |
+| `--beast_log_every`    | `1000`     | Logging interval (lower = larger files but finer posterior sampling)          |
 
 **Outputs** (in `results/beast2/`):
 
-| File | Description |
-|------|-------------|
-| `beast_mcc.tree` | MCC tree with posterior node age annotations (open in FigTree or R `treeio`) |
-| `beast_run.log` | MCMC trace for convergence diagnostics (open in Tracer) |
-| `beast_run.trees` | Full posterior tree distribution (10 % burn-in applied by TreeAnnotator) |
+| File              | Description                                                                  |
+| ----------------- | ---------------------------------------------------------------------------- |
+| `beast_mcc.tree`  | MCC tree with posterior node age annotations (open in FigTree or R `treeio`) |
+| `beast_run.log`   | MCMC trace for convergence diagnostics (open in Tracer)                      |
+| `beast_run.trees` | Full posterior tree distribution (10 % burn-in applied by TreeAnnotator)     |
 
 > **Note:** BEAST2 is computationally intensive. For large collections (>200 samples) consider reducing `--beast_chain_length` for a pilot run and checking ESS values in Tracer before a production run.
 
@@ -432,22 +432,22 @@ Adding a new pathogen requires only a species descriptor YAML + adapter subworkf
 
 ## Tools and scripts
 
-| Script | Purpose |
-|--------|---------|
-| `bin/staphit-metadata` | Metadata conversion (Vitek PDF/CSV, external XLSX) |
-| `bin/pubmlst_fetch.py` | ST/CC-based public genome retrieval from PubMLST, NCBI SRA, and ENA |
-| `bin/beast2_prep.py` | Generates BEAST2 2.7 XML from core SNP alignment + metadata dates |
-| `bin/plot_tree.R` | Annotated phylogenetic tree (PDF + SVG) from pipeline outputs |
-| `bin/staphit-aggregate` | Per-sample report aggregation |
-| `bin/staphit-virulence` | Structured virulence profiling (PVL, TSST, IEC, operons) |
-| `bin/staphit-mutations` | Point mutation extraction and phenotype prediction |
-| `bin/staphit-cluster` | Tiered outbreak clustering with epi annotation |
-| `bin/staphit-plasmids` | Plasmid profile parsing from MOB-suite |
-| `bin/staphit-qc` | CheckM2 quality gate assessment |
-| `bin/staphit-report` | Automated run report generator |
-| `bin/staphit-visualize` | Publication figure generation |
-| `bin/staphit-dashboard` | Interactive Plotly Dash surveillance dashboard |
-| `bin/staphit-watch` | FASTQ directory monitor for continuous surveillance |
+| Script                  | Purpose                                                             |
+| ----------------------- | ------------------------------------------------------------------- |
+| `bin/staphit-metadata`  | Metadata conversion (Vitek PDF/CSV, external XLSX)                  |
+| `bin/pubmlst_fetch.py`  | ST/CC-based public genome retrieval from PubMLST, NCBI SRA, and ENA |
+| `bin/beast2_prep.py`    | Generates BEAST2 2.7 XML from core SNP alignment + metadata dates   |
+| `bin/plot_tree.R`       | Annotated phylogenetic tree (PDF + SVG) from pipeline outputs       |
+| `bin/staphit-aggregate` | Per-sample report aggregation                                       |
+| `bin/staphit-virulence` | Structured virulence profiling (PVL, TSST, IEC, operons)            |
+| `bin/staphit-mutations` | Point mutation extraction and phenotype prediction                  |
+| `bin/staphit-cluster`   | Tiered outbreak clustering with epi annotation                      |
+| `bin/staphit-plasmids`  | Plasmid profile parsing from MOB-suite                              |
+| `bin/staphit-qc`        | CheckM2 quality gate assessment                                     |
+| `bin/staphit-report`    | Automated run report generator                                      |
+| `bin/staphit-visualize` | Publication figure generation                                       |
+| `bin/staphit-dashboard` | Interactive Plotly Dash surveillance dashboard                      |
+| `bin/staphit-watch`     | FASTQ directory monitor for continuous surveillance                 |
 
 ## Submitting to nf-core
 
@@ -455,18 +455,18 @@ This pipeline follows nf-core conventions and is on the path to community submis
 
 ### Requirements for nf-core listing
 
-| Requirement | Status |
-|-------------|--------|
-| nf-core template | ✅ Created with nf-core create |
-| nextflow_schema.json | ⚠️ Needs custom params added |
-| nf-test for all processes | ⚠️ Pending |
-| CI/CD (GitHub Actions) | ✅ Template CI exists |
-| `-profile test` with bundled data | ⚠️ Needs test dataset |
-| Documentation (usage.md, output.md) | ⚠️ Pending |
-| nf-core lint passes | ⚠️ Pending fixes |
-| Standard nf-core modules where available | ✅ 11 nf-core modules used |
-| Conda environment per module | ⚠️ Pending |
-| Code review by nf-core community | Not started |
+| Requirement                              | Status                         |
+| ---------------------------------------- | ------------------------------ |
+| nf-core template                         | ✅ Created with nf-core create |
+| nextflow_schema.json                     | ⚠️ Needs custom params added   |
+| nf-test for all processes                | ⚠️ Pending                     |
+| CI/CD (GitHub Actions)                   | ✅ Template CI exists          |
+| `-profile test` with bundled data        | ⚠️ Needs test dataset          |
+| Documentation (usage.md, output.md)      | ⚠️ Pending                     |
+| nf-core lint passes                      | ⚠️ Pending fixes               |
+| Standard nf-core modules where available | ✅ 11 nf-core modules used     |
+| Conda environment per module             | ⚠️ Pending                     |
+| Code review by nf-core community         | Not started                    |
 
 ### Submission process
 

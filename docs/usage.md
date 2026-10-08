@@ -2,7 +2,7 @@
 
 ## Introduction
 
-**alarawms/staphit2** is an nf-core-compatible Nextflow pipeline for comprehensive MRSA (*Staphylococcus aureus*) genomic surveillance. Starting from raw Illumina paired-end reads, it performs quality control, *de novo* assembly, multi-locus typing (MLST, spa, SCCmec, agr), antimicrobial resistance gene detection and point mutation calling, structured virulence profiling, plasmid reconstruction, core genome phylogenetics, pairwise SNP distances, tiered outbreak clustering, and automated reporting with publication-ready figures.
+**alarawms/staphit2** is an nf-core-compatible Nextflow pipeline for comprehensive MRSA (_Staphylococcus aureus_) genomic surveillance. Starting from raw Illumina paired-end reads, it performs quality control, _de novo_ assembly, multi-locus typing (MLST, spa, SCCmec, agr), antimicrobial resistance gene detection and point mutation calling, structured virulence profiling, plasmid reconstruction, core genome phylogenetics, pairwise SNP distances, tiered outbreak clustering, and automated reporting with publication-ready figures.
 
 The pipeline is built on a species-agnostic core architecture. Species-specific analysis steps (typing tools, virulence categories, outbreak thresholds) are driven by a descriptor file (`species/s_aureus.yml`), enabling future extension to additional pathogens without modifying the core workflow.
 
@@ -14,31 +14,40 @@ You will need to create a samplesheet CSV describing the samples you want to ana
 --input samplesheet.csv
 ```
 
-The file must be comma-separated with a header row and at least three columns. Each row represents one sample (paired-end reads).
+The file is comma-separated with a header row. Each row is one sample. Short reads, long reads, or both can be given; the pipeline detects the mode from which columns are filled:
 
 ```csv title="samplesheet.csv"
-sample,fastq_1,fastq_2
-MRSA_001,/data/MRSA_001_R1.fastq.gz,/data/MRSA_001_R2.fastq.gz
-MRSA_002,/data/MRSA_002_R1.fastq.gz,/data/MRSA_002_R2.fastq.gz
-MRSA_003,/data/MRSA_003_R1.fastq.gz,/data/MRSA_003_R2.fastq.gz
+sample,fastq_1,fastq_2,long_fastq
+MRSA_001,/data/MRSA_001_R1.fastq.gz,/data/MRSA_001_R2.fastq.gz,
+MRSA_002,/data/MRSA_002_R1.fastq.gz,/data/MRSA_002_R2.fastq.gz,/data/MRSA_002_ont.fastq.gz
+MRSA_003,,,/data/MRSA_003_ont.fastq.gz
 ```
 
-| Column   | Description |
-|----------|-------------|
-| `sample` | Unique sample identifier. Must not contain spaces. If the same identifier appears on multiple rows the pipeline will concatenate the raw reads before downstream analysis (useful for samples sequenced across multiple lanes). |
-| `fastq_1` | Full path to the forward-read FASTQ file. Must be gzipped (`.fastq.gz` or `.fq.gz`). |
-| `fastq_2` | Full path to the reverse-read FASTQ file. Must be gzipped (`.fastq.gz` or `.fq.gz`). |
+| Column       | Description                                                                                                                |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| `sample`     | Unique sample identifier, no spaces. Each sample must appear on **one** row: put its short and long reads on the same row. |
+| `fastq_1`    | Forward Illumina reads (`.fastq.gz` / `.fq.gz`). Local path or `https://`/`ftp://`/`s3://` URL.                            |
+| `fastq_2`    | Reverse Illumina reads.                                                                                                    |
+| `long_fastq` | Oxford Nanopore reads (optional).                                                                                          |
 
-An [example samplesheet](../assets/samplesheet.csv) is provided with the pipeline.
+| Filled columns                     | Mode     | Read QC                 | Assembly                                                             |
+| ---------------------------------- | -------- | ----------------------- | -------------------------------------------------------------------- |
+| `fastq_1`, `fastq_2`               | `short`  | fastp, FastQC           | SKESA (or SPAdes, `--assembler spades`)                              |
+| `fastq_1`, `fastq_2`, `long_fastq` | `hybrid` | fastp, FastQC, NanoPlot | Dragonflye: Flye + Racon, polished with the short reads (Polypolish) |
+| `long_fastq`                       | `long`   | NanoPlot                | Dragonflye: Flye + Racon (+ Medaka with `--medaka_model`)            |
 
-### Multiple runs of the same sample
+Relative paths are resolved against the directory you launch Nextflow from.
 
-If a sample was sequenced more than once (e.g. to increase depth), use the same `sample` name on each row. The pipeline will concatenate reads before any downstream processing:
+### Building a samplesheet from accessions
 
-```csv title="samplesheet.csv"
-sample,fastq_1,fastq_2
-MRSA_001,MRSA_001_L001_R1.fastq.gz,MRSA_001_L001_R2.fastq.gz
-MRSA_001,MRSA_001_L002_R1.fastq.gz,MRSA_001_L002_R2.fastq.gz
+`bin/accessions_to_samplesheet.py` turns any file containing ENA/SRA accessions (a manifest, a CSV/TSV, a plain list, in any column) into a samplesheet. It resolves runs, experiments, samples and studies; merges runs of the same BioSample (or on the same input line) into one sample; and detects `short` / `hybrid` / `long` from the sequencing platform.
+
+```bash
+# FASTQ columns as ENA URLs (Nextflow downloads them at run time)
+bin/accessions_to_samplesheet.py manifest.tsv samplesheet.csv
+
+# Or download once into a local folder (parallel, MD5-checked) — recommended for large sets
+bin/accessions_to_samplesheet.py manifest.tsv samplesheet.csv --download fastq/
 ```
 
 ## Metadata input (optional)
@@ -57,17 +66,17 @@ MRSA_002,Staphylococcus aureus,2025-11-03,Saudi Arabia,Riyadh,Homo sapiens,blood
 
 Commonly used fields include:
 
-| Field | Description |
-|-------|-------------|
-| `sample_id` | Must match samplesheet `sample` column |
-| `organism` | Species name |
-| `collection_date` | ISO 8601 date (YYYY-MM-DD) |
-| `geo_loc_country` | Country of collection |
-| `geo_loc_region` | Sub-national region |
-| `host` | Host organism (e.g. `Homo sapiens`) |
-| `isolation_source` | Body site or environmental source |
-| `purpose_of_sampling` | Reason for sampling |
-| `infection_origin` | HA-MRSA, CA-MRSA, or LA-MRSA |
+| Field                 | Description                            |
+| --------------------- | -------------------------------------- |
+| `sample_id`           | Must match samplesheet `sample` column |
+| `organism`            | Species name                           |
+| `collection_date`     | ISO 8601 date (YYYY-MM-DD)             |
+| `geo_loc_country`     | Country of collection                  |
+| `geo_loc_region`      | Sub-national region                    |
+| `host`                | Host organism (e.g. `Homo sapiens`)    |
+| `isolation_source`    | Body site or environmental source      |
+| `purpose_of_sampling` | Reason for sampling                    |
+| `infection_origin`    | HA-MRSA, CA-MRSA, or LA-MRSA           |
 
 ### Antibiogram (`--antibiogram`)
 
@@ -80,16 +89,27 @@ MRSA_001,Oxacillin,resistant,4,mg/L,>=,MIC,CLSI
 MRSA_002,Vancomycin,susceptible,0.5,mg/L,<=,MIC,CLSI
 ```
 
-| Field | Description |
-|-------|-------------|
-| `sample_id` | Must match samplesheet `sample` column |
-| `antibiotic` | Antimicrobial agent name |
-| `resistance_phenotype` | `susceptible`, `intermediate`, or `resistant` |
-| `measurement` | MIC value or zone diameter |
-| `measurement_units` | `mg/L` (MIC) or `mm` (disk diffusion) |
-| `measurement_sign` | `<=`, `=`, or `>=` |
-| `laboratory_typing_method` | `MIC`, `DISK`, or `ETEST` |
-| `testing_standard` | `CLSI` or `EUCAST` |
+| Field                      | Description                                   |
+| -------------------------- | --------------------------------------------- |
+| `sample_id`                | Must match samplesheet `sample` column        |
+| `antibiotic`               | Antimicrobial agent name                      |
+| `resistance_phenotype`     | `susceptible`, `intermediate`, or `resistant` |
+| `measurement`              | MIC value or zone diameter                    |
+| `measurement_units`        | `mg/L` (MIC) or `mm` (disk diffusion)         |
+| `measurement_sign`         | `<=`, `=`, or `>=`                            |
+| `laboratory_typing_method` | `MIC`, `DISK`, or `ETEST`                     |
+| `testing_standard`         | `CLSI` or `EUCAST`                            |
+
+### Fetching metadata for public samples
+
+`bin/fetch_metadata.py` reads BioSample accessions from any file (e.g. the samplesheet) and pulls harmonized attributes (collection date, country, host, isolation source) from NCBI BioSample, writing a metadata CSV ready for `--metadata` plus a completeness report:
+
+```bash
+bin/fetch_metadata.py samplesheet.csv metadata.csv     # also writes metadata.completeness.tsv
+nextflow run alarawms/staphit2 -profile docker --input samplesheet.csv --metadata metadata.csv --outdir results
+```
+
+Set `NCBI_API_KEY` to raise NCBI's rate limit. Year, host group and source group labels are harmonized by `bin/harmonize_metadata.py` (food categories are kept separate) and used by the summary table, the tree plot and the iTOL files.
 
 ### Generating metadata from lab data
 
@@ -144,15 +164,18 @@ nextflow run alarawms/staphit2 \
 
 ### Using a params file
 
+> [!NOTE]
+> With Nextflow ≥ 25.10, boolean flags given on the command line (`--skip_qc_gate true`) arrive as strings and fail schema validation. Set booleans in a params file instead.
+
 Rather than specifying every flag on the command line, you can place parameters in a YAML file:
 
 ```yaml title="params.yaml"
-input: 'samplesheet.csv'
-outdir: 'results'
-metadata: 'sample_metadata.csv'
-antibiogram: 'antibiogram.csv'
-phylo_method: 'panaroo'
-tree_builder: 'iqtree'
+input: "samplesheet.csv"
+outdir: "results"
+metadata: "sample_metadata.csv"
+antibiogram: "antibiogram.csv"
+phylo_method: "panaroo"
+tree_builder: "iqtree"
 target_depth: 100
 ```
 
@@ -175,86 +198,108 @@ work/               # Nextflow working files
 
 ### Input/Output
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `--input` | (required) | Path to samplesheet CSV |
-| `--outdir` | (required) | Path to output directory |
-| `--metadata` | `null` | Path to sample metadata CSV (PHA4GE schema) |
-| `--antibiogram` | `null` | Path to antibiogram CSV (NCBI long format) |
-| `--genome` | `null` | iGenomes genome key (not typically used) |
-| `--reference` | `null` | Reference genome in GenBank format (required when `--phylo_method snippy`) |
+| Parameter       | Default    | Description                                                                |
+| --------------- | ---------- | -------------------------------------------------------------------------- |
+| `--input`       | (required) | Path to samplesheet CSV                                                    |
+| `--outdir`      | (required) | Path to output directory                                                   |
+| `--metadata`    | `null`     | Path to sample metadata CSV (PHA4GE schema)                                |
+| `--antibiogram` | `null`     | Path to antibiogram CSV (NCBI long format)                                 |
+| `--genome`      | `null`     | iGenomes genome key (not typically used)                                   |
+| `--reference`   | `null`     | Reference genome in GenBank format (required when `--phylo_method snippy`) |
 
 ### Assembly and read processing
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `--genome_size` | `2800000` | Expected genome size in bp (used by Rasusa for subsampling) |
-| `--target_depth` | `100` | Target coverage depth for Rasusa read subsampling |
+| Parameter        | Default   | Description                                                 |
+| ---------------- | --------- | ----------------------------------------------------------- |
+| `--genome_size`  | `2800000` | Expected genome size in bp (used by Rasusa for subsampling) |
+| `--target_depth` | `100`     | Target coverage depth for Rasusa read subsampling           |
 
 ### Quality control
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `--min_completeness` | `90` | Minimum CheckM2 completeness (%) to pass QC gate |
-| `--max_contamination` | `5` | Maximum CheckM2 contamination (%) to pass QC gate |
-| `--skip_qc_gate` | `false` | Skip the CheckM2 quality gate and process all samples |
-| `--species_ani_threshold` | `95.0` | Minimum ANI (%) to NCTC 8325 for *S. aureus* species confirmation |
-| `--skip_species_qc` | `false` | Skip fastANI species confirmation step |
-| `--assembler` | `skesa` | Assembly tool: `skesa` (default) or `spades` |
+| Parameter                 | Default | Description                                                       |
+| ------------------------- | ------- | ----------------------------------------------------------------- |
+| `--min_completeness`      | `90`    | Minimum CheckM2 completeness (%) to pass QC gate                  |
+| `--max_contamination`     | `5`     | Maximum CheckM2 contamination (%) to pass QC gate                 |
+| `--skip_qc_gate`          | `false` | Skip the CheckM2 quality gate and process all samples             |
+| `--species_ani_threshold` | `95.0`  | Minimum ANI (%) to NCTC 8325 for _S. aureus_ species confirmation |
+| `--skip_species_qc`       | `false` | Skip fastANI species confirmation step                            |
+| `--assembler`             | `skesa` | Short-read assembler: `skesa` (default) or `spades`               |
+
+### Long reads
+
+| Parameter        | Default | Description                                                                                    |
+| ---------------- | ------- | ---------------------------------------------------------------------------------------------- |
+| `--flye_nanohq`  | `false` | Run Flye with `--nano-hq` (R10.4.1 / Q20+ reads)                                               |
+| `--medaka_model` | `null`  | Medaka model for long-only polishing (e.g. `r1041_e82_400bps_sup_v5.0.0`); omitted = no Medaka |
+
+### Databases
+
+Databases are downloaded on the first run and published to `<outdir>/databases/`. Pass them back on later runs to skip the download; their versions (or checksums) are recorded in `pipeline_info/staphit2_software_mqc_versions.yml`.
+
+| Parameter               | Default    | Description                                              |
+| ----------------------- | ---------- | -------------------------------------------------------- |
+| `--checkm2_db`          | `null`     | Local CheckM2 DIAMOND database (`uniref100.KO.1.dmnd`)   |
+| `--amrfinder_db`        | `null`     | Local AMRFinderPlus database (`amrfinderdb.tar.gz`)      |
+| `--mash_db`             | `null`     | Local Mash RefSeq sketch (`refseq.genomes.k21s1000.msh`) |
+| `--resfinder_db_commit` | `eecf0aa…` | ResFinder database git commit used by KMA                |
 
 ### Typing
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `--sccmec_viz` | `false` | Generate SVG/HTML visual maps of SCCmec cassette elements |
+| Parameter            | Default       | Description                                                                            |
+| -------------------- | ------------- | -------------------------------------------------------------------------------------- |
+| `--sccmec_viz`       | `false`       | Generate SVG/HTML visual maps of SCCmec cassette elements                              |
+| `--sccmec_best_fit`  | `true`        | When the type is Unknown, report the estimator's best candidate as `Type X (best-fit)` |
+| `--sccmec_min_score` | `0.6`         | Minimum estimator score for `--sccmec_best_fit`                                        |
+| `--sccmec_container` | pinned digest | sccmec_typer image; override to test a typer build                                     |
 
 ### Phylogenetics
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `--phylo_method` | `panaroo` | Core genome method: `panaroo` (pangenome-based) or `snippy` (reference-based) |
-| `--tree_builder` | `iqtree` | Tree inference: `iqtree` (ML, slower, more accurate) or `fasttree` (approximate ML, faster) |
-| `--panaroo_clean` | `moderate` | Panaroo graph-cleaning stringency: `strict`, `moderate`, or `sensitive` |
-| `--panaroo_threshold` | `0.95` | Fraction of samples a gene must appear in to be considered core |
-| `--panaroo_aligner` | `mafft` | Alignment tool used by Panaroo |
-| `--snippy_mincov` | `10` | Minimum read depth for Snippy variant calls |
-| `--snippy_minqual` | `100` | Minimum mapping quality for Snippy variant calls |
+| Parameter             | Default    | Description                                                                                 |
+| --------------------- | ---------- | ------------------------------------------------------------------------------------------- |
+| `--phylo_method`      | `panaroo`  | Core genome method: `panaroo` (pangenome-based) or `snippy` (reference-based)               |
+| `--tree_builder`      | `iqtree`   | Tree inference: `iqtree` (ML, slower, more accurate) or `fasttree` (approximate ML, faster) |
+| `--panaroo_clean`     | `moderate` | Panaroo graph-cleaning stringency: `strict`, `moderate`, or `sensitive`                     |
+| `--panaroo_threshold` | `0.95`     | Fraction of samples a gene must appear in to be considered core                             |
+| `--panaroo_aligner`   | `mafft`    | Alignment tool used by Panaroo                                                              |
+| `--snippy_mincov`     | `10`       | Minimum read depth for Snippy variant calls                                                 |
+| `--snippy_minqual`    | `100`      | Minimum mapping quality for Snippy variant calls                                            |
+| `--plot_tree`         | `true`     | Draw the annotated tree (PDF + SVG)                                                         |
 
 ### Clustering
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `--cluster_snp_tiers` | `15,50,200` | Core gene SNP thresholds for direct transmission, outbreak, and related tiers (calibrated for Panaroo alignment; use `5,15,40` for WGS reference-mapped distances) |
-| `--cluster_cgmlst_tiers` | `10,24,50` | Comma-separated cgMLST allelic distance thresholds for the same three tiers |
+| Parameter                | Default     | Description                                                                                                                                                        |
+| ------------------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `--cluster_snp_tiers`    | `15,50,200` | Core gene SNP thresholds for direct transmission, outbreak, and related tiers (calibrated for Panaroo alignment; use `5,15,40` for WGS reference-mapped distances) |
+| `--cluster_cgmlst_tiers` | `10,24,50`  | Comma-separated cgMLST allelic distance thresholds for the same three tiers                                                                                        |
 
 ### MultiQC
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `--multiqc_config` | `null` | Path to a custom MultiQC config YAML |
-| `--multiqc_title` | `null` | Custom title for the MultiQC report |
-| `--multiqc_logo` | `null` | Path to a custom logo for the MultiQC report |
+| Parameter          | Default | Description                                  |
+| ------------------ | ------- | -------------------------------------------- |
+| `--multiqc_config` | `null`  | Path to a custom MultiQC config YAML         |
+| `--multiqc_title`  | `null`  | Custom title for the MultiQC report          |
+| `--multiqc_logo`   | `null`  | Path to a custom logo for the MultiQC report |
 
 ## Profiles
 
 Use `-profile` to select a software packaging method. Multiple profiles can be combined (e.g. `-profile test,docker`):
 
-| Profile | Description |
-|---------|-------------|
-| `docker` | Run all tools via [Docker](https://docker.com/) containers (recommended) |
-| `singularity` | Run via [Singularity](https://sylabs.io/docs/) containers (recommended for HPC) |
-| `apptainer` | Run via [Apptainer](https://apptainer.org/) containers |
-| `conda` | Run via [Conda](https://conda.io/) environments (last resort) |
-| `mamba` | Conda with [Mamba](https://mamba.readthedocs.io/) solver |
-| `podman` | Run via [Podman](https://podman.io/) containers |
-| `shifter` | Run via [Shifter](https://nersc.gitlab.io/development/shifter/how-to-use/) containers |
-| `charliecloud` | Run via [Charliecloud](https://charliecloud.io/) containers |
-| `wave` | Enable [Wave](https://seqera.io/wave/) containers (use with another profile) |
-| `test` | Minimal test dataset; runs automatically without additional input |
-| `test_full` | Full-size test dataset for complete validation |
+| Profile        | Description                                                                           |
+| -------------- | ------------------------------------------------------------------------------------- |
+| `docker`       | Run all tools via [Docker](https://docker.com/) containers (recommended)              |
+| `singularity`  | Run via [Singularity](https://sylabs.io/docs/) containers (recommended for HPC)       |
+| `apptainer`    | Run via [Apptainer](https://apptainer.org/) containers                                |
+| `conda`        | Run via [Conda](https://conda.io/) environments (last resort)                         |
+| `mamba`        | Conda with [Mamba](https://mamba.readthedocs.io/) solver                              |
+| `podman`       | Run via [Podman](https://podman.io/) containers                                       |
+| `shifter`      | Run via [Shifter](https://nersc.gitlab.io/development/shifter/how-to-use/) containers |
+| `charliecloud` | Run via [Charliecloud](https://charliecloud.io/) containers                           |
+| `wave`         | Enable [Wave](https://seqera.io/wave/) containers (use with another profile)          |
+| `test`         | Minimal test dataset; runs automatically without additional input                     |
+| `test_full`    | Full-size test dataset for complete validation                                        |
 
 > [!IMPORTANT]
-> We highly recommend Docker or Singularity for full reproducibility. Use Conda only when containers are not available.
+> Use Docker, Podman, Singularity or Apptainer. `conda`/`mamba` are **not supported**: the nf-core modules ship conda environments, but the local modules (SCCmec and agr typers, SKESA, CheckM2, MOB-suite, chewBBACA and the Python reporting steps) run only in containers. The Python steps use `ghcr.io/alarawms/staphit2-python`, built from `docker/staphit2-python/environment.yml`; that file can also create an equivalent conda environment for development.
 
 The pipeline also dynamically loads institutional profiles from [nf-core/configs](https://github.com/nf-core/configs) at runtime.
 
@@ -274,7 +319,7 @@ Pin a specific release when running production analyses:
 nextflow run alarawms/staphit2 -r 1.0.0 -profile docker --input samplesheet.csv --outdir results
 ```
 
-The version number is recorded in the MultiQC report and in `results/pipeline_info/` execution reports, ensuring traceability.
+The pipeline version, every tool version and the database versions (AMRFinderPlus database, ResFinder commit, CheckM2/Mash checksums) are recorded in `results/pipeline_info/staphit2_software_mqc_versions.yml` and in the MultiQC report. All containers are pinned to a version tag or digest.
 
 To repeat a run with identical settings, reuse a [params file](#using-a-params-file). When sharing params files (e.g. as supplementary material), remove any cluster-specific paths or institutional profile references.
 
@@ -288,21 +333,21 @@ Start from a list of ENA/SRA accessions and cross-reference them against a metad
 
 CC97 includes the following sequence types (STs):
 
-| ST | Relationship to ST97 |
-|----|---------------------|
-| 97 | Founder |
+| ST   | Relationship to ST97       |
+| ---- | -------------------------- |
+| 97   | Founder                    |
 | 1153 | Single-locus variant (SLV) |
-| 1465 | SLV |
-| 3187 | SLV |
-| 8064 | SLV |
-| 2996 | SLV |
-| 5435 | SLV |
-| 3528 | SLV |
-| 2458 | SLV |
-| 3009 | SLV |
-| 7570 | SLV |
-| 3636 | SLV |
-| 5264 | SLV |
+| 1465 | SLV                        |
+| 3187 | SLV                        |
+| 8064 | SLV                        |
+| 2996 | SLV                        |
+| 5435 | SLV                        |
+| 3528 | SLV                        |
+| 2458 | SLV                        |
+| 3009 | SLV                        |
+| 7570 | SLV                        |
+| 3636 | SLV                        |
+| 5264 | SLV                        |
 
 Accessions from general surveillance studies that do not report ST metadata cannot be confirmed as CC97 and should be excluded until after typing.
 
@@ -393,11 +438,11 @@ Annotation files are written to `results/itol/`. Upload the treefile and annotat
 
 **Annotation data sources for mixed local + public trees:**
 
-| Annotation track | Local samples | Public (ENA) samples |
-|-----------------|---------------|----------------------|
+| Annotation track                             | Local samples          | Public (ENA) samples                  |
+| -------------------------------------------- | ---------------------- | ------------------------------------- |
 | ST, SCCmec, spa, agr, AMR, virulence, origin | `combined_summary.tsv` | `combined_summary.tsv` (if passed QC) |
-| Country, year | `combined_summary.tsv` | `cc97_metadata.tsv` |
-| Hospital, city, region, gender, patient type | `sample_metadata.csv` | Not available |
+| Country, year                                | `combined_summary.tsv` | `cc97_metadata.tsv`                   |
+| Hospital, city, region, gender, patient type | `sample_metadata.csv`  | Not available                         |
 
 Public samples that failed assembly QC (CheckM2 completeness < 90%) pass Snippy alignment and therefore appear in the tree but have no typing data. Their annotation tracks will be blank for all fields except country and year (if present in the metadata TSV).
 
