@@ -299,7 +299,7 @@ Use `-profile` to select a software packaging method. Multiple profiles can be c
 | `test_full`    | Full-size test dataset for complete validation                                        |
 
 > [!IMPORTANT]
-> Use Docker, Podman, Singularity or Apptainer. `conda`/`mamba` are **not supported**: the nf-core modules ship conda environments, but the local modules (SCCmec and agr typers, SKESA, CheckM2, MOB-suite, chewBBACA and the Python reporting steps) run only in containers. The Python steps use `ghcr.io/alarawms/staphit2-python`, built from `docker/staphit2-python/environment.yml`; that file can also create an equivalent conda environment for development.
+> Use Docker, Podman, Singularity or Apptainer. `conda`/`mamba` are **not supported**: the nf-core modules ship conda environments, but the local modules (SCCmec and agr typers, SKESA, CheckM2, MOB-suite, chewBBACA and the Python reporting steps) run only in containers. The Python steps use `ghcr.io/alarawms/staphit2-python` and the tree plot uses `ghcr.io/alarawms/staphit2-r`, built from `docker/staphit2-python/` and `docker/staphit2-r/`; their `environment.yml` files can also create equivalent conda environments for development.
 
 The pipeline also dynamically loads institutional profiles from [nf-core/configs](https://github.com/nf-core/configs) at runtime.
 

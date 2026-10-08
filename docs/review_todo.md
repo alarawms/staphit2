@@ -23,7 +23,7 @@ A1–A11: branch `chore/nf-core-standards`. Notes:
 - [x] **A9** Pinned Python image (not EOL `python:3.9`); call `bin/` scripts by name, not `${projectDir}/bin/...`
 - [x] **A10** Docs: `usage.md` (long_fastq, accessions/metadata helpers, new params), `output.md` (fastp, NanoPlot, Dragonflye, iTOL, SCCmec IWG columns), `CITATIONS.md` (all tools)
 - [x] **A11** Conda/Singularity: document docker/singularity-only support for local modules
-- [ ] **A15** `PLOT_TREE` installs CRAN packages (ggnewscale, RColorBrewer, dplyr, stringr) at run time — needs a container that ships them
+- [x] **A15** `PLOT_TREE` runs on `ghcr.io/alarawms/staphit2-r:1.0.0` (pinned R 4.5.3 + ggtree stack); no run-time package installs
 - [x] **A17** `sccmec_container` default pinned to the sccmec_typer build from merged PR #4 (`sha256:f4ba10ae…`, has `--fallback-1/2`)
 - [ ] **A16** nf-test 0.9.x needs `NXF_SYNTAX_PARSER=v1` (set in CI); drop it once nf-test supports the strict parser
 - [ ] **A18** Real minimal test dataset for `-profile test` (the old `assets/test-data` FASTQs were never committed); CI currently runs the stub pipeline test (`tests/default.nf.test`)

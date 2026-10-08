@@ -1,7 +1,7 @@
 process PLOT_TREE {
     tag "phylogeny"
     label 'process_medium'
-    container 'quay.io/biocontainers/bioconductor-ggtreeextra:1.20.1--r45hdfd78af_0'
+    container 'ghcr.io/alarawms/staphit2-r:1.0.0'   // all R packages pre-installed (docker/staphit2-r)
 
     input:
     path treefile
@@ -19,14 +19,6 @@ process PLOT_TREE {
     """
     # v3: sccmec_group from summary; v2: harmonized year/host/source rings, explicit ring width, no svglite/readr
     #     (bump this line after editing bin/plot_tree.R so -resume re-plots)
-    # Install missing CRAN packages into local lib (cached by work dir on -resume)
-    mkdir -p rlibs
-    Rscript -e "
-        .libPaths(c('rlibs', .libPaths()))
-        pkgs <- c('ggnewscale', 'RColorBrewer', 'dplyr', 'stringr')
-        new  <- pkgs[!pkgs %in% installed.packages()[,'Package']]
-        if (length(new)) install.packages(new, repos='https://cloud.r-project.org', lib='rlibs', quiet=TRUE)
-    "
 
     # Recreate the directory layout plot_tree.R expects
     mkdir -p iqtree summary clusters
@@ -34,7 +26,7 @@ process PLOT_TREE {
     ln -sf \$(realpath ${summary})  summary/combined_summary.tsv
     ln -sf \$(realpath ${clusters}) clusters/clusters.tsv
 
-    R_LIBS=\$PWD/rlibs Rscript plot_tree.R . ${run_name}
+    plot_tree.R . ${run_name}
     """
 
     stub:
