@@ -25,7 +25,7 @@ A1–A11: branch `chore/nf-core-standards`. Notes:
 - [x] **A11** Conda/Singularity: document docker/singularity-only support for local modules
 - [ ] **A15** `PLOT_TREE` installs CRAN packages (ggnewscale, RColorBrewer, dplyr, stringr) at run time — needs a container that ships them
 - [x] **A17** `sccmec_container` default pinned to the sccmec_typer build from merged PR #4 (`sha256:f4ba10ae…`, has `--fallback-1/2`)
-- [ ] **A16** nf-test 0.9.x needs `NXF_SYNTAX_PARSER=v1` (set in CI); drop it once nf-test supports the strict parser
+- [x] **A16** CI uses nf-test 0.9.5 (strict-syntax support); the `NXF_SYNTAX_PARSER=v1` workaround is removed
 - [ ] **A18** Real minimal test dataset for `-profile test` (the old `assets/test-data` FASTQs were never committed); CI currently runs the stub pipeline test (`tests/default.nf.test`)
 - [x] **A12** Remove dead code (unused Trim Galore module, unused `reporting.nf`)
 - [x] **A13** Deprecated syntax (`Channel.` → `channel.` etc.) in local workflows/subworkflows
