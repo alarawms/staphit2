@@ -415,8 +415,28 @@ def build_plasmids(plasmid_path):
 # Report generation
 # ---------------------------------------------------------------------------
 
+def build_sample_status(status_path):
+    """Section listing every input sample that did not make it into the results."""
+    if not status_path or not os.path.exists(status_path):
+        return ''
+    rows = _read_tsv(status_path)
+    if not rows:
+        return ''
+    counts = Counter(r['status'] for r in rows)
+    lines = ["## Sample Status", "",
+             f"{len(rows)} input samples: {counts.get('included', 0)} included, "
+             f"{counts.get('not_in_tree', 0)} in the summary but not in the tree, "
+             f"{counts.get('dropped', 0)} dropped. Full list: `report/sample_status.tsv`.", ""]
+    missing = [r for r in rows if r['status'] != 'included']
+    if missing:
+        lines += ["| Sample | Status | Stage | Reason |", "|--------|--------|-------|--------|"]
+        lines += [f"| {r['sample_id']} | {r['status']} | {r['stage']} | {r['reason']} |" for r in missing]
+        lines.append("")
+    return '\n'.join(lines)
+
+
 def generate_report(summary_path, cluster_path=None, qc_path=None,
-                    plasmid_path=None, versions_path=None):
+                    plasmid_path=None, versions_path=None, status_path=None):
     """Generate a full Markdown run report.
 
     Parameters
@@ -439,6 +459,7 @@ def generate_report(summary_path, cluster_path=None, qc_path=None,
 
     sections = []
     sections.append(build_header(rows))
+    sections.append(build_sample_status(status_path))
     sections.append(build_methods(versions_path))
     sections.append(build_read_qc(rows))
     sections.append(build_assembly_qc(rows))
@@ -479,6 +500,10 @@ def main(argv=None):
         help='Path to plasmid_summary.tsv (optional).',
     )
     parser.add_argument(
+        '--status',
+        help='Path to sample_status.tsv (optional).',
+    )
+    parser.add_argument(
         '--versions',
         help='Path to software versions YAML (optional).',
     )
@@ -494,6 +519,7 @@ def main(argv=None):
         qc_path=args.qc,
         plasmid_path=args.plasmids,
         versions_path=getattr(args, 'versions', None),
+        status_path=args.status,
     )
 
     os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
