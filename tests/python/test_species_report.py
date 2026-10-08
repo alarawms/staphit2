@@ -51,7 +51,9 @@ class TestSpeciesReport:
             ['S2.fasta', 'ref.fasta', 80.1, 400, 900],
         ])
         mash = _write_mash_screen(tmp_path, [
-            [0.95, '800/1000', 50, 'GCF_000007645.1', 'S. epidermidis strain ATCC 12228'],
+            # sample_id, identity, shared-hashes, median-multiplicity, p-value, query-ID, query-comment
+            ['S2', 0.95, '800/1000', 50, 0, 'GCF_000007645.1_ASM764v1_genomic.fna.gz',
+             '[1 seqs] NC_004461.1 Staphylococcus epidermidis ATCC 12228'],
         ])
         outdir = str(tmp_path / 'out')
         result = subprocess.run(
@@ -79,3 +81,34 @@ class TestSpeciesReport:
         with open(os.path.join(outdir, 'species_confirmed.tsv')) as fh:
             rows = list(csv.DictReader(fh, delimiter='\t'))
         assert rows[0]['sample_id'] == 'ID00001'
+
+    def test_second_species_and_contamination_flag(self, tmp_path):
+        fastani = _write_fastani(tmp_path, [
+            ['CLEAN.scaffolds.fasta', 'ref.fasta', 99.1, 900, 950],
+            ['MIXED.scaffolds.fasta', 'ref.fasta', 99.0, 880, 950],
+        ])
+        aureus = '[2 seqs] NZ_CP000253.1 Staphylococcus aureus subsp. aureus NCTC 8325'
+        mash = _write_mash_screen(tmp_path, [
+            # winner-take-all can hand the top hit to an unnamed genome; it must not hide the species
+            ['CLEAN', 0.9996, '991/1000', 60, 0, 'GCF_sp_genomic.fna.gz', '[1 seqs] NZ_JA1.1 Staphylococcus sp. isolate 7'],
+            ['CLEAN', 0.9995, '990/1000', 60, 0, 'GCF_000013425.1_genomic.fna.gz', aureus],
+            # phages match every S. aureus genome and must never count as a second species
+            ['CLEAN', 0.9900, '813/1000', 5, 0, 'GCF_x_genomic.fna.gz', '[1 seqs] NC_1.1 Staphylococcus phage 80alpha'],
+            ['CLEAN', 0.9800, '700/1000', 3, 0, 'GCF_y_genomic.fna.gz', '[1 seqs] NC_2.1 Staphylococcus prophage phiPV83'],
+            ['MIXED', 0.9994, '987/1000', 60, 0, 'GCF_000013425.1_genomic.fna.gz', aureus],
+            ['MIXED', 0.9273, '205/1000', 2, 0, 'GCF_z_genomic.fna.gz', '[1 seqs] NZ_CP3.1 Lysinibacillus fusiformis strain X'],
+        ])
+        outdir = str(tmp_path / 'out')
+        result = subprocess.run(
+            [sys.executable, TOOL_PATH, '--fastani', fastani, '--mash-screen', mash,
+             '--threshold', '95.0', '--outdir', outdir],
+            capture_output=True, text=True)
+        assert result.returncode == 0, result.stderr
+        with open(os.path.join(outdir, 'species_confirmed.tsv')) as fh:
+            rows = {r['sample_id']: r for r in csv.DictReader(fh, delimiter='\t')}
+        assert rows['CLEAN']['mash_species'] == 'Staphylococcus aureus'
+        assert rows['CLEAN']['second_species'] == ''
+        assert rows['CLEAN']['flag'] == ''
+        assert rows['MIXED']['second_species'] == 'Lysinibacillus fusiformis'
+        assert rows['MIXED']['second_shared_hashes'] == '205/1000'
+        assert rows['MIXED']['flag'].startswith('possible_contamination: Lysinibacillus fusiformis')

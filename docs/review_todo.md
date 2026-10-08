@@ -42,5 +42,5 @@ A1–A11: branch `chore/nf-core-standards`. Notes:
 - [ ] **B7** Assembler choice: SKESA fragments repeat regions (246/684 split SCCmec cassettes); evaluate SPAdes/shovill
 - [ ] **B8** Recombination masking (Gubbins/ClonalFrameML) before BEAST2 dating; also the BEAST2 container has no Python for `beast2_prep.py` (split prep into its own process)
 - [ ] **B9** Consensus _S. aureus_ resistance calls across AMRFinderPlus / ResFinder / KMA (down-weight KMA on raw ONT)
-- [ ] **B10** Species QC: report second-best hit alongside NCTC8325 ANI
+- [x] **B10** Species QC reports best and second-best bacterial species (Mash screen -w on every assembly, phage/plasmid hits ignored) and flags `possible_contamination` (≥0.90 identity, ≥100/1000 hashes); within-species mixtures remain for B2
 - [ ] **B11** Cluster thresholds: document scheme per threshold (PubMLST scheme 20, 1,716 loci); recalibrate on known outbreaks

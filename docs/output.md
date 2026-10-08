@@ -144,6 +144,20 @@ The QC gate integrates metrics from QUAST and CheckM2 to produce a pass/fail dec
 
 ## Typing
 
+### species_qc/
+
+<details markdown="1">
+<summary>Output files</summary>
+
+- `species_qc/`
+  - `species_confirmed.tsv`: Every sample: fastANI to NCTC 8325, `status` (PASS/FAIL), best Mash species and identity, the **second bacterial species** (`second_species`, `second_identity`, `second_shared_hashes`) and a `flag`.
+  - `species_excluded.tsv`: Samples below `--species_ani_threshold` with their best Mash species.
+  - `*.txt`, `*.screen`: Raw fastANI and Mash screen output per sample.
+
+</details>
+
+[fastANI](https://github.com/ParBLiSS/FastANI) against _S. aureus_ NCTC 8325 confirms the species; samples below `--species_ani_threshold` (default 95%) are excluded. [Mash screen](https://github.com/marbl/Mash) (winner-take-all, against RefSeq) runs on every assembly. Phage, prophage and plasmid entries are ignored, and unnamed genomes (`Staphylococcus sp.`) are used only when no named species matches. The best hit names the species of excluded samples. A second bacterial species at Mash identity ≥ 0.90 with ≥ 100/1000 shared hashes is flagged `possible_contamination` (for example _Lysinibacillus fusiformis_ in a sample CheckM2 also scores at 19.8% contamination). The flag is informational; flagged samples are not removed. Mixtures of two _S. aureus_ strains are not visible to Mash.
+
 ### mlst/
 
 <details markdown="1">
