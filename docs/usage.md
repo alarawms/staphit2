@@ -216,14 +216,14 @@ work/               # Nextflow working files
 
 ### Quality control
 
-| Parameter                 | Default | Description                                                       |
-| ------------------------- | ------- | ----------------------------------------------------------------- |
-| `--min_completeness`      | `90`    | Minimum CheckM2 completeness (%) to pass QC gate                  |
-| `--max_contamination`     | `5`     | Maximum CheckM2 contamination (%) to pass QC gate                 |
-| `--skip_qc_gate`          | `false` | Skip the CheckM2 quality gate and process all samples             |
-| `--species_ani_threshold` | `95.0`  | Minimum ANI (%) to NCTC 8325 for _S. aureus_ species confirmation |
-| `--skip_species_qc`       | `false` | Skip fastANI species confirmation step                            |
-| `--assembler`             | `skesa` | Short-read assembler: `skesa` (default) or `spades`               |
+| Parameter                 | Default | Description                                                                |
+| ------------------------- | ------- | -------------------------------------------------------------------------- |
+| `--min_completeness`      | `90`    | Minimum CheckM2 completeness (%) to pass QC gate                           |
+| `--max_contamination`     | `5`     | Maximum CheckM2 contamination (%) to pass QC gate                          |
+| `--skip_qc_gate`          | `false` | Skip CheckM2 (and its ~3 GB database) and the QC gate; all samples proceed |
+| `--species_ani_threshold` | `95.0`  | Minimum ANI (%) to NCTC 8325 for _S. aureus_ species confirmation          |
+| `--skip_species_qc`       | `false` | Skip fastANI species confirmation step                                     |
+| `--assembler`             | `skesa` | Short-read assembler: `skesa` (default) or `spades`                        |
 
 ### Long reads
 
@@ -284,19 +284,19 @@ Databases are downloaded on the first run and published to `<outdir>/databases/`
 
 Use `-profile` to select a software packaging method. Multiple profiles can be combined (e.g. `-profile test,docker`):
 
-| Profile        | Description                                                                           |
-| -------------- | ------------------------------------------------------------------------------------- |
-| `docker`       | Run all tools via [Docker](https://docker.com/) containers (recommended)              |
-| `singularity`  | Run via [Singularity](https://sylabs.io/docs/) containers (recommended for HPC)       |
-| `apptainer`    | Run via [Apptainer](https://apptainer.org/) containers                                |
-| `conda`        | Run via [Conda](https://conda.io/) environments (last resort)                         |
-| `mamba`        | Conda with [Mamba](https://mamba.readthedocs.io/) solver                              |
-| `podman`       | Run via [Podman](https://podman.io/) containers                                       |
-| `shifter`      | Run via [Shifter](https://nersc.gitlab.io/development/shifter/how-to-use/) containers |
-| `charliecloud` | Run via [Charliecloud](https://charliecloud.io/) containers                           |
-| `wave`         | Enable [Wave](https://seqera.io/wave/) containers (use with another profile)          |
-| `test`         | Minimal test dataset; runs automatically without additional input                     |
-| `test_full`    | Full-size test dataset for complete validation                                        |
+| Profile        | Description                                                                                                                                                                       |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `docker`       | Run all tools via [Docker](https://docker.com/) containers (recommended)                                                                                                          |
+| `singularity`  | Run via [Singularity](https://sylabs.io/docs/) containers (recommended for HPC)                                                                                                   |
+| `apptainer`    | Run via [Apptainer](https://apptainer.org/) containers                                                                                                                            |
+| `conda`        | Run via [Conda](https://conda.io/) environments (last resort)                                                                                                                     |
+| `mamba`        | Conda with [Mamba](https://mamba.readthedocs.io/) solver                                                                                                                          |
+| `podman`       | Run via [Podman](https://podman.io/) containers                                                                                                                                   |
+| `shifter`      | Run via [Shifter](https://nersc.gitlab.io/development/shifter/how-to-use/) containers                                                                                             |
+| `charliecloud` | Run via [Charliecloud](https://charliecloud.io/) containers                                                                                                                       |
+| `wave`         | Enable [Wave](https://seqera.io/wave/) containers (use with another profile)                                                                                                      |
+| `test`         | 4 real _S. aureus_ samples (short, hybrid, long-only) from [staphit2-test-data](https://github.com/alarawms/staphit2-test-data); skips CheckM2 and species QC (~15 min on 4 CPUs) |
+| `test_full`    | Full-size test dataset for complete validation                                                                                                                                    |
 
 > [!IMPORTANT]
 > Use Docker, Podman, Singularity or Apptainer. `conda`/`mamba` are **not supported**: the nf-core modules ship conda environments, but the local modules (SCCmec and agr typers, SKESA, CheckM2, MOB-suite, chewBBACA and the Python reporting steps) run only in containers. The Python steps use `ghcr.io/alarawms/staphit2-python`, built from `docker/staphit2-python/environment.yml`; that file can also create an equivalent conda environment for development.

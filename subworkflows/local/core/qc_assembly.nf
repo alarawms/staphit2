@@ -103,37 +103,28 @@ workflow QC_ASSEMBLY {
     // ch_versions = ch_versions.mix(QUAST.out.versions.first()) // uses topic channels
 
     //
-    // MODULE: Download CheckM2 database (runs once)
-    //
-    // --checkm2_db reuses a local uniref100.KO.1.dmnd
-    if (params.checkm2_db) {
-        ch_checkm2_db = channel.value(file(params.checkm2_db, checkIfExists: true))
-    } else {
-        CHECKM2_DB ()
-        ch_checkm2_db = CHECKM2_DB.out.db
-    }
-
-    //
-    // MODULE: Assess assembly completeness with CheckM2
-    //
-    CHECKM2 (
-        ch_assemblies,
-        ch_checkm2_db
-    )
-
-    //
-    // MODULE: QC Gate — filter samples by completeness/contamination
-    //
-    QC_GATE (
-        CHECKM2.out.report.map { _meta, report -> report }.collect()
-    )
-
-    //
-    // Filter assemblies to only QC-passed samples (skip filter when --skip_qc_gate)
+    // CheckM2 + QC gate. --skip_qc_gate skips both (and the ~3 GB CheckM2 database download).
     //
     if (params.skip_qc_gate) {
         ch_passed_assemblies = ch_assemblies
+        ch_checkm2_reports   = channel.empty()
+        ch_qc_report         = channel.value(file("${projectDir}/assets/NO_QC"))
+        ch_qc_passed         = channel.empty()
+        ch_qc_failed         = channel.empty()
     } else {
+        // --checkm2_db reuses a local uniref100.KO.1.dmnd
+        if (params.checkm2_db) {
+            ch_checkm2_db = channel.value(file(params.checkm2_db, checkIfExists: true))
+        } else {
+            CHECKM2_DB ()
+            ch_checkm2_db = CHECKM2_DB.out.db
+        }
+
+        CHECKM2 ( ch_assemblies, ch_checkm2_db )
+
+        // Filter by completeness/contamination
+        QC_GATE ( CHECKM2.out.report.map { _meta, report -> report }.collect() )
+
         ch_passed_ids = QC_GATE.out.passed
             .splitText()
             .map { s -> s.trim() }
@@ -145,6 +136,11 @@ workflow QC_ASSEMBLY {
             .combine(ch_passed_ids)
             .filter { meta, _fasta, passed_set -> meta.id in passed_set }
             .map { meta, fasta, _passed_set -> [ meta, fasta ] }
+
+        ch_checkm2_reports = CHECKM2.out.report
+        ch_qc_report       = QC_GATE.out.report
+        ch_qc_passed       = QC_GATE.out.passed
+        ch_qc_failed       = QC_GATE.out.failed
     }
 
     emit:
@@ -158,10 +154,10 @@ workflow QC_ASSEMBLY {
     passed_assemblies = ch_passed_assemblies    // channel: [ val(meta), path(scaffolds) ]  — QC-passed only
     primary_scaffolds = ch_primary_scaffolds    // channel: [ val(meta), path(scaffolds) ]
     quast_results     = QUAST.out.results       // channel: [ val(meta), path(results) ]
-    checkm2_reports   = CHECKM2.out.report      // channel: [ val(meta), path(report) ]
-    qc_report         = QC_GATE.out.report      // channel: path(qc_report.tsv)
-    qc_passed         = QC_GATE.out.passed      // channel: path(passed_samples.txt)
-    qc_failed         = QC_GATE.out.failed      // channel: path(failed_samples.txt)
+    checkm2_reports   = ch_checkm2_reports      // channel: [ val(meta), path(report) ]
+    qc_report         = ch_qc_report            // channel: path(qc_report.tsv)
+    qc_passed         = ch_qc_passed            // channel: path(passed_samples.txt)
+    qc_failed         = ch_qc_failed            // channel: path(failed_samples.txt)
     assembly_dropped  = ch_assembly_dropped     // channel: val(string) — TSV of samples dropped by size filter
     versions          = ch_versions             // channel: [ path(versions.yml) ]
 }
