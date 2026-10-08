@@ -64,10 +64,6 @@ workflow SPECIES_QC {
         .filter { meta, _fasta, confirmed_set -> meta.id in confirmed_set }
         .map { meta, fasta, _confirmed_set -> [ meta, fasta ] }
 
-    ch_rejected_assemblies = ch_assemblies
-        .combine(ch_confirmed_ids)
-        .filter { meta, _fasta, confirmed_set -> !(meta.id in confirmed_set) }
-        .map { meta, fasta, _confirmed_set -> [ meta, fasta ] }
 
     //
     // MODULE: Download Mash RefSeq sketch (once, cached)
@@ -81,12 +77,13 @@ workflow SPECIES_QC {
     }
 
     //
-    // MODULE: Mash screen on rejected samples to identify species
+    // MODULE: Mash screen on every assembly: names the species of rejected samples and
+    // reports a second bacterial species (possible contamination) for all samples
     //
     ch_mash_db = ch_mash_raw.map { db -> [ [id: 'refseq'], db ] }
 
     MASH_SCREEN (
-        ch_rejected_assemblies,
+        ch_assemblies,
         ch_mash_db.collect()
     )
     ch_versions = ch_versions.mix(MASH_SCREEN.out.versions.first())
@@ -100,12 +97,15 @@ workflow SPECIES_QC {
         .map { meta, f -> f.text.trim() ? f.text.trim() + '\n' : "${meta.id}.scaffolds.fasta\tnone\t0\t0\t0\n" }
         .collectFile(name: 'fastani_all.tsv')
 
-    // Keep only each rejected sample's best Mash hit, prefixed with its sample ID
+    // Each sample's top 30 Mash hits, prefixed with its sample ID (phage hits are dropped
+    // in the report, so keep enough lines for a second bacterial species to survive)
     ch_mash_collected = MASH_SCREEN.out.screen
         .map { meta, screen ->
-            def best = screen.text.readLines().findAll { l -> l.trim() }
-                .max { l -> l.split('\t')[0] as Double }
-            best ? "${meta.id}\t${best}\n" : ''
+            screen.text.readLines().findAll { l -> l.trim() }
+                .sort { l -> -(l.split('\t')[0] as Double) }
+                .take(30)
+                .collect { l -> "${meta.id}\t${l}\n" }
+                .join('')
         }
         .collectFile(name: 'mash_screen_all.tsv')
         .ifEmpty(file('NO_MASH_RESULTS'))

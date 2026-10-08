@@ -31,31 +31,65 @@ def parse_fastani(path):
     return results
 
 
+# RefSeq also holds phage, prophage and plasmid entries; Staphylococcus phages match every
+# S. aureus genome, so they are never a "species" hit.
+NON_CELLULAR = re.compile(r'phage|prophage|plasmid|virus', re.IGNORECASE)
+
+
 def parse_mash_screen(path):
-    """Parse per-sample best Mash hits: sample_id, identity, shared-hashes,
-    median-multiplicity, p-value, query-ID (RefSeq file), query-comment (organism)."""
+    """Parse Mash screen hits per sample: sample_id, identity, shared-hashes,
+    median-multiplicity, p-value, query-ID (RefSeq file), query-comment (organism).
+    Returns {sample_id: [hit, ...]} with bacterial hits only, best identity first."""
     results = {}
     if not path or not os.path.exists(path):
         return results
     with open(path) as fh:
         for line in fh:
             parts = line.rstrip('\n').split('\t')
-            if len(parts) >= 6:
-                comment = parts[6] if len(parts) > 6 else ''
-                comment = re.sub(r'^\[\d+ seqs\]\s*', '', comment)   # "[19 seqs] NZ_x Genus species ..."
-                organism = ' '.join(comment.split()[1:3]) if comment else parts[5]
-                results[parts[0]] = {
-                    'identity': float(parts[1]),
-                    'organism': organism,
-                    'accession': parts[5].split('_genomic')[0],
-                }
+            if len(parts) < 6:
+                continue
+            comment = parts[6] if len(parts) > 6 else ''
+            comment = re.sub(r'^\[\d+ seqs\]\s*', '', comment)   # "[19 seqs] NZ_x Genus species ..."
+            organism = ' '.join(comment.split()[1:3]) if comment else parts[5]
+            if NON_CELLULAR.search(organism):
+                continue
+            results.setdefault(parts[0], []).append({
+                'identity': float(parts[1]),
+                'shared': parts[2],
+                'organism': organism,
+                'accession': parts[5].split('_genomic')[0],
+            })
+    for sid, hits in results.items():
+        # Unnamed genomes ("Staphylococcus sp.") say nothing about the species: rank named ones first
+        named = [h for h in hits if not h['organism'].endswith(' sp.')]
+        results[sid] = sorted(named or hits, key=lambda h: h['identity'], reverse=True)
     return results
+
+
+def second_species(hits):
+    """Best hit of a species other than the top one (None if there is none)."""
+    if not hits:
+        return None
+    return next((h for h in hits[1:] if h['organism'] != hits[0]['organism']), None)
+
+
+def contamination_flag(second, min_identity, min_hashes):
+    if not second:
+        return ''
+    shared = int(second['shared'].split('/')[0])
+    if second['identity'] >= min_identity and shared >= min_hashes:
+        return f"possible_contamination: {second['organism']} ({second['identity']:.3f}, {second['shared']})"
+    return ''
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description='Species QC report from fastANI + Mash screen')
     parser.add_argument('--fastani', required=True, help='fastANI output TSV')
-    parser.add_argument('--mash-screen', help='Mash screen output for rejected samples (optional)')
+    parser.add_argument('--mash-screen', help='Mash screen hits per sample, prefixed with the sample ID (optional)')
+    parser.add_argument('--contam-identity', type=float, default=0.90,
+                        help='Flag a second bacterial species at or above this Mash identity (default 0.90)')
+    parser.add_argument('--contam-hashes', type=int, default=100,
+                        help='... and at least this many shared hashes of 1000 (default 100)')
     parser.add_argument('--threshold', type=float, default=95.0, help='ANI threshold for species confirmation')
     parser.add_argument('--outdir', required=True, help='Output directory')
     args = parser.parse_args(argv)
@@ -80,24 +114,37 @@ def main(argv=None):
         else:
             excluded.append(entry)
 
-    # Write confirmed (all samples with status)
+    # Every sample: ANI status plus its best and second-best Mash species (B10)
+    mash_by_sample = parse_mash_screen(args.mash_screen) if args.mash_screen else {}
+    for row in confirmed + excluded:
+        hits = mash_by_sample.get(row['sample_id'], [])
+        second = second_species(hits)
+        row.update({
+            'mash_species': hits[0]['organism'] if hits else '',
+            'mash_identity': f"{hits[0]['identity']:.4f}" if hits else '',
+            'second_species': second['organism'] if second else '',
+            'second_identity': f"{second['identity']:.4f}" if second else '',
+            'second_shared_hashes': second['shared'] if second else '',
+            'flag': contamination_flag(second, args.contam_identity, args.contam_hashes),
+        })
+
     confirmed_path = os.path.join(args.outdir, 'species_confirmed.tsv')
     with open(confirmed_path, 'w', newline='') as fh:
         writer = csv.DictWriter(fh, delimiter='\t',
-                                fieldnames=['sample_id', 'ani_percent', 'mapped_fragments', 'total_fragments', 'status'])
+                                fieldnames=['sample_id', 'ani_percent', 'mapped_fragments', 'total_fragments', 'status',
+                                            'mash_species', 'mash_identity', 'second_species', 'second_identity',
+                                            'second_shared_hashes', 'flag'])
         writer.writeheader()
         for row in confirmed + excluded:
             writer.writerow(row)
 
-    # Enrich excluded with each sample's own best Mash screen hit
-    mash_by_sample = parse_mash_screen(args.mash_screen) if args.mash_screen else {}
     excluded_path = os.path.join(args.outdir, 'species_excluded.tsv')
     with open(excluded_path, 'w', newline='') as fh:
         writer = csv.DictWriter(fh, delimiter='\t',
                                 fieldnames=['sample_id', 'ani_percent', 'identified_species', 'mash_identity', 'mash_accession'])
         writer.writeheader()
         for entry in excluded:
-            mash_hit = mash_by_sample.get(entry['sample_id'], {})
+            mash_hit = (mash_by_sample.get(entry['sample_id']) or [{}])[0]
             writer.writerow({
                 'sample_id': entry['sample_id'],
                 'ani_percent': entry['ani_percent'],
@@ -106,7 +153,8 @@ def main(argv=None):
                 'mash_accession': mash_hit.get('accession', ''),
             })
 
-    print(f"Species QC: {len(confirmed)} confirmed, {len(excluded)} excluded", file=sys.stderr)
+    flagged = sum(1 for r in confirmed + excluded if r['flag'])
+    print(f"Species QC: {len(confirmed)} confirmed, {len(excluded)} excluded, {flagged} flagged", file=sys.stderr)
     return 0
 
 
