@@ -297,6 +297,42 @@
                     "minimum": 0,
                     "maximum": 100
                 },
+                "min_assembly_size": {
+                    "type": "integer",
+                    "default": 2500000,
+                    "minimum": 0,
+                    "description": "Drop assemblies shorter than this (bp)."
+                },
+                "max_assembly_size": {
+                    "type": "integer",
+                    "default": 3200000,
+                    "minimum": 0,
+                    "description": "Drop assemblies longer than this (bp); larger usually means contamination or a mixed sample."
+                },
+                "min_depth_short": {
+                    "type": "number",
+                    "default": 30,
+                    "minimum": 0,
+                    "description": "Flag samples whose trimmed Illumina depth is below this (x genome_size). Flag only."
+                },
+                "min_depth_long": {
+                    "type": "number",
+                    "default": 20,
+                    "minimum": 0,
+                    "description": "Flag samples whose ONT depth is below this. Flag only."
+                },
+                "max_contigs": {
+                    "type": "integer",
+                    "default": 500,
+                    "minimum": 0,
+                    "description": "Flag assemblies with more contigs than this. Flag only."
+                },
+                "min_n50": {
+                    "type": "integer",
+                    "default": 10000,
+                    "minimum": 0,
+                    "description": "Flag assemblies with an N50 below this (bp). Flag only."
+                },
                 "assembler": {
                     "type": "string",
                     "default": "skesa",

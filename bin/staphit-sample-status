@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""staphit-sample-status: say what happened to every input sample.
+"""staphit-sample-status: say what happened to every input sample, and flag weak ones.
 
 Each sample is followed through the pipeline stages; the first stage it is missing from
 is why it was dropped. Stages (in order) come from --stages, a TSV of `stage<TAB>sample_id`
@@ -7,7 +7,7 @@ lines written by the workflow:
 
     input        every samplesheet row
     assembled    the assembler produced contigs           (else: assembly_failed)
-    size_pass    assembly >= 500 kb                       (else: assembly_too_small)
+    size_pass    assembly length within --min/max-size    (else: assembly_size_out_of_range)
     qc_pass      passed the CheckM2 QC gate               (else: qc_gate_failed)
     species_pass confirmed S. aureus by fastANI           (else: not_s_aureus)
 
@@ -16,10 +16,13 @@ then the run-level outputs:
     summary      row in combined_summary.tsv              (else: typing_incomplete)
     tree         tip in the phylogeny                     (else: not_in_tree; still in the summary)
 
-`size<TAB>sample_id<TAB>bytes` lines give the assembly size for the size reason.
-Detail files named NO_* are placeholders for skipped steps and are ignored.
+Value lines `size|depth_short|depth_long<TAB>sample_id<TAB>value` give the assembly length (bp)
+and read depth (x). Samples that are kept are flagged (not dropped) for low depth, too many
+contigs or a low N50; the flags go to the `flags` column and, with --summary-out, to a
+`qc_flags` column added to the summary. Detail files named NO_* are placeholders for skipped
+steps and are ignored.
 
-Output TSV: sample_id, status (included | not_in_tree | dropped), stage, reason
+Output TSV: sample_id, status (included | not_in_tree | dropped), stage, reason, flags
 """
 import argparse
 import csv
@@ -29,10 +32,11 @@ import sys
 
 STAGES = [
     ('assembled', 'assembly_failed'),
-    ('size_pass', 'assembly_too_small'),
+    ('size_pass', 'assembly_size_out_of_range'),
     ('qc_pass', 'qc_gate_failed'),
     ('species_pass', 'not_s_aureus'),
 ]
+VALUE_STAGES = ('size', 'depth_short', 'depth_long')
 
 
 def _given(path):
@@ -46,39 +50,48 @@ def _rows(path):
         return {r['sample_id']: r for r in csv.DictReader(fh, delimiter='\t')}
 
 
+def _int(value):
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return None
+
+
 def read_stages(path):
-    seen, sizes, order = {}, {}, []
+    """-> ({stage: set(ids)}, {value_stage: {id: float}}, [input ids in order])"""
+    seen, values, order = {}, {k: {} for k in VALUE_STAGES}, []
     with open(path) as fh:
         for line in fh:
             parts = line.rstrip('\n').split('\t')
             if len(parts) < 2 or not parts[1]:
                 continue
             stage, sid = parts[0], parts[1]
-            if stage == 'size':
-                sizes[sid] = int(parts[2])
+            if stage in VALUE_STAGES:
+                values[stage][sid] = float(parts[2])
                 continue
             seen.setdefault(stage, set()).add(sid)
             if stage == 'input' and sid not in order:
                 order.append(sid)
-    return seen, sizes, order
+    return seen, values, order
 
 
 def tree_tips(path):
     if not _given(path):
         return None
-    text = open(path).read()
-    return set(re.findall(r'[(,]\s*([^():,;\s]+)', text))
+    with open(path) as fh:
+        return set(re.findall(r'[(,]\s*([^():,;\s]+)', fh.read()))
 
 
-def classify(sid, seen, sizes, qc, species, summary, tips):
+def classify(sid, seen, values, qc, species, summary, tips, a):
     for stage, label in STAGES:
         if sid in seen.get(stage, set()):
             continue
         if label == 'assembly_failed':
             why = 'assembler produced no contigs (low depth, wrong read type, or tool error; see the assembler log)'
-        elif label == 'assembly_too_small':
-            size = sizes.get(sid, 0)
-            why = 'assembly is empty (no contigs)' if size == 0 else f"assembly {size / 1e6:.2f} MB < 0.5 MB"
+        elif label == 'assembly_size_out_of_range':
+            size = values['size'].get(sid, 0)
+            why = 'assembly is empty (no contigs)' if size == 0 else \
+                f"assembly {size / 1e6:.2f} Mb outside {a.min_size / 1e6:.2f}-{a.max_size / 1e6:.2f} Mb"
         elif label == 'qc_gate_failed':
             r = qc.get(sid, {})
             why = r.get('reason') or f"completeness {r.get('completeness', '?')}%, contamination {r.get('contamination', '?')}%"
@@ -93,6 +106,22 @@ def classify(sid, seen, sizes, qc, species, summary, tips):
     return 'included', '', ''
 
 
+def flags_for(sid, values, summary_row, a):
+    """Weak-but-kept signals: low read depth, fragmented assembly."""
+    flags = []
+    short, long_ = values['depth_short'].get(sid), values['depth_long'].get(sid)
+    if short is not None and short < a.min_depth_short:
+        flags.append(f'low_depth_short:{short:.0f}x')
+    if long_ is not None and long_ < a.min_depth_long:
+        flags.append(f'low_depth_long:{long_:.0f}x')
+    contigs, n50 = _int(summary_row.get('contigs')), _int(summary_row.get('n50'))
+    if contigs is not None and contigs > a.max_contigs:
+        flags.append(f'contigs:{contigs}')
+    if n50 is not None and n50 < a.min_n50:
+        flags.append(f'n50:{n50 / 1000:.1f}kb')
+    return ';'.join(flags)
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument('--stages', required=True)
@@ -100,21 +129,41 @@ def main(argv=None):
     ap.add_argument('--species-excluded')
     ap.add_argument('--summary', required=True)
     ap.add_argument('--tree')
+    ap.add_argument('--min-size', type=float, default=2.5e6)
+    ap.add_argument('--max-size', type=float, default=3.2e6)
+    ap.add_argument('--min-depth-short', type=float, default=30)
+    ap.add_argument('--min-depth-long', type=float, default=20)
+    ap.add_argument('--max-contigs', type=int, default=500)
+    ap.add_argument('--min-n50', type=int, default=10000)
+    ap.add_argument('--summary-out', help='Write the summary with a qc_flags column here')
     ap.add_argument('-o', '--output', required=True)
     a = ap.parse_args(argv)
 
-    seen, sizes, order = read_stages(a.stages)
+    seen, values, order = read_stages(a.stages)
     qc, species, summary = _rows(a.qc), _rows(a.species_excluded), _rows(a.summary)
     tips = tree_tips(a.tree)
-    counts = {}
+    counts, flags = {}, {}
     with open(a.output, 'w', newline='') as fh:
         w = csv.writer(fh, delimiter='\t')
-        w.writerow(['sample_id', 'status', 'stage', 'reason'])
+        w.writerow(['sample_id', 'status', 'stage', 'reason', 'flags'])
         for sid in order:
-            status, stage, why = classify(sid, seen, sizes, qc, species, summary, tips)
+            status, stage, why = classify(sid, seen, values, qc, species, summary, tips, a)
+            flags[sid] = flags_for(sid, values, summary.get(sid, {}), a) if status != 'dropped' else ''
             counts[status] = counts.get(status, 0) + 1
-            w.writerow([sid, status, stage, why])
-    print('Sample status: ' + ', '.join(f'{k} {v}' for k, v in sorted(counts.items())), file=sys.stderr)
+            w.writerow([sid, status, stage, why, flags[sid]])
+
+    if a.summary_out:
+        with open(a.summary, newline='') as fin, open(a.summary_out, 'w', newline='') as fout:
+            reader = csv.DictReader(fin, delimiter='\t')
+            writer = csv.DictWriter(fout, delimiter='\t', fieldnames=list(reader.fieldnames) + ['qc_flags'])
+            writer.writeheader()
+            for row in reader:
+                row['qc_flags'] = flags.get(row['sample_id'], '')
+                writer.writerow(row)
+
+    flagged = sum(1 for f in flags.values() if f)
+    print('Sample status: ' + ', '.join(f'{k} {v}' for k, v in sorted(counts.items())) + f'; {flagged} flagged',
+          file=sys.stderr)
 
 
 if __name__ == '__main__':

@@ -158,7 +158,17 @@ workflow STAPHIT2 {
     ch_stages = ch_samplesheet.map { meta, _sr, _lr -> "input\t${meta.id}" }
         .mix(
             QC_ASSEMBLY.out.primary_scaffolds.map { meta, _x -> "assembled\t${meta.id}" },
-            QC_ASSEMBLY.out.primary_scaffolds.map { meta, fasta -> "size\t${meta.id}\t${fasta.size()}" },
+            QC_ASSEMBLY.out.assembly_lengths.map { meta, len -> "size\t${meta.id}\t${len}" },
+            // read depth (bases / genome size): trimmed Illumina from fastp, ONT from NanoPlot
+            QC_ASSEMBLY.out.trim_log.map { meta, json ->
+                def bases = new groovy.json.JsonSlurper().parse(json)?.summary?.after_filtering?.total_bases
+                bases != null ? "depth_short\t${meta.id}\t${bases / params.genome_size}" : ''   // '' = no depth line
+            },
+            QC_ASSEMBLY.out.nanoplot_stats.map { meta, stats ->
+                def line  = stats.readLines().find { l -> l.startsWith('Total bases:') }
+                def bases = line ? (line.split(':')[1].trim().replace(',', '') as Double) : null
+                bases != null ? "depth_long\t${meta.id}\t${bases / params.genome_size}" : ''
+            },
             QC_ASSEMBLY.out.assemblies.map { meta, _x -> "size_pass\t${meta.id}" },
             QC_ASSEMBLY.out.passed_assemblies.map { meta, _x -> "qc_pass\t${meta.id}" },
             ch_assemblies.map { meta, _x -> "species_pass\t${meta.id}" }

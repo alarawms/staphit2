@@ -432,6 +432,12 @@ def build_sample_status(status_path):
         lines += ["| Sample | Status | Stage | Reason |", "|--------|--------|-------|--------|"]
         lines += [f"| {r['sample_id']} | {r['status']} | {r['stage']} | {r['reason']} |" for r in missing]
         lines.append("")
+    flagged = [r for r in rows if r.get('flags')]
+    if flagged:
+        lines += [f"{len(flagged)} kept samples are flagged (low depth, >max contigs or low N50; see `qc_flags` in the summary):", "",
+                  "| Sample | Flags |", "|--------|-------|"]
+        lines += [f"| {r['sample_id']} | {r['flags'].replace(';', ', ')} |" for r in flagged]
+        lines.append("")
     return '\n'.join(lines)
 
 
