@@ -497,10 +497,22 @@ When metadata is provided, cluster reports are annotated with epidemiological co
 
 - `report/`
   - `run_report.md`: Automated Markdown surveillance report.
+  - `sample_status.tsv`: Every input sample with `status` (`included`, `not_in_tree`, `dropped`), the `stage` where it was lost and the `reason`.
 
 </details>
 
 The report generator (`bin/staphit-report`) produces a narrative Markdown report summarizing the run: sample counts, QC pass rates, lineage distribution, resistance patterns, cluster summary, and key findings. This report is suitable for direct sharing with infection control teams.
+
+Samples can drop out at several points; `sample_status.tsv` and the report's _Sample Status_ section list each one with the first stage it failed:
+
+| Stage                | Meaning                                                                                             |
+| -------------------- | --------------------------------------------------------------------------------------------------- |
+| `assembly_failed`    | The assembler produced no contigs (its error is ignored so the run continues)                       |
+| `assembly_too_small` | Assembly smaller than 500 kb, or empty                                                              |
+| `qc_gate_failed`     | CheckM2 completeness / contamination outside the thresholds                                         |
+| `not_s_aureus`       | fastANI to NCTC 8325 below `--species_ani_threshold`; best Mash hit given                           |
+| `typing_incomplete`  | A typing or AMR step failed, so the sample has no summary row                                       |
+| `not_in_tree`        | In the summary but excluded from the phylogeny (Snippy failure or >80% unaligned, Panaroo <500 CDS) |
 
 ### figures/
 

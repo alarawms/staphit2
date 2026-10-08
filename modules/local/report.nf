@@ -7,6 +7,7 @@ process REPORT {
     path clusters
     path qc_report
     path plasmid_summary
+    path sample_status
 
     output:
     path "run_report.md", emit: report
@@ -17,7 +18,7 @@ process REPORT {
     def qc_flag = qc_report.name != 'NO_QC' ? "--qc ${qc_report}" : ''
     def plasmid_flag = plasmid_summary.name != 'NO_PLASMIDS' ? "--plasmids ${plasmid_summary}" : ''
     """
-    staphit-report --summary ${summary_tsv} ${cluster_flag} ${qc_flag} ${plasmid_flag} -o run_report.md
+    staphit-report --summary ${summary_tsv} ${cluster_flag} ${qc_flag} ${plasmid_flag} --status ${sample_status} -o run_report.md
     """
 
     stub:

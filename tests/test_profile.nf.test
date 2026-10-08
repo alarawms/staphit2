@@ -31,6 +31,8 @@ nextflow_pipeline {
                 { assert rows.SAMEA117686580.mlst_st == '1535' },
                 { assert rows.SAMEA117686580.sccmec_iwg == 'V(5C2)' },
                 { assert path("$outputDir/iqtree").list().size() > 0 },
+                // every tool and database version (Nextflow version removed: CI runs several)
+                { assert snapshot(removeNextflowVersion("$outputDir/pipeline_info/staphit2_software_mqc_versions.yml")).match() },
             )
         }
     }

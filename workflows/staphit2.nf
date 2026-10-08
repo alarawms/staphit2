@@ -38,6 +38,7 @@ include { ITOL_EXPORT      } from '../modules/local/itol_export'
 
 // MultiQC
 include { MULTIQC          } from '../modules/nf-core/multiqc/main'
+include { SAMPLE_STATUS    } from '../modules/local/sample_status'
 
 workflow STAPHIT2 {
 
@@ -57,10 +58,12 @@ workflow STAPHIT2 {
     // ── Phase 1b: Species Confirmation ──────────────────────────────────────
     if (!params.skip_species_qc) {
         SPECIES_QC ( QC_ASSEMBLY.out.passed_assemblies )
-        ch_assemblies = SPECIES_QC.out.confirmed_assemblies
-        ch_versions   = ch_versions.mix(SPECIES_QC.out.versions)
+        ch_assemblies        = SPECIES_QC.out.confirmed_assemblies
+        ch_species_excluded  = SPECIES_QC.out.species_excluded
+        ch_versions          = ch_versions.mix(SPECIES_QC.out.versions)
     } else {
-        ch_assemblies = QC_ASSEMBLY.out.passed_assemblies
+        ch_assemblies        = QC_ASSEMBLY.out.passed_assemblies
+        ch_species_excluded  = channel.value(file("${projectDir}/assets/NO_SPECIES_QC"))
     }
 
     // ── Phase 2: S. aureus Typing ───────────────────────────────────────────
@@ -151,11 +154,31 @@ workflow STAPHIT2 {
     )
 
     // ── Phase 8: Reporting & Visualization ──────────────────────────────────
+    // Which stages each sample reached; the first one missing is why it was dropped
+    ch_stages = ch_samplesheet.map { meta, _sr, _lr -> "input\t${meta.id}" }
+        .mix(
+            QC_ASSEMBLY.out.primary_scaffolds.map { meta, _x -> "assembled\t${meta.id}" },
+            QC_ASSEMBLY.out.primary_scaffolds.map { meta, fasta -> "size\t${meta.id}\t${fasta.size()}" },
+            QC_ASSEMBLY.out.assemblies.map { meta, _x -> "size_pass\t${meta.id}" },
+            QC_ASSEMBLY.out.passed_assemblies.map { meta, _x -> "qc_pass\t${meta.id}" },
+            ch_assemblies.map { meta, _x -> "species_pass\t${meta.id}" }
+        )
+        .collectFile(name: 'stages.tsv', newLine: true, sort: true)
+
+    SAMPLE_STATUS (
+        ch_stages,
+        QC_ASSEMBLY.out.qc_report,
+        ch_species_excluded,
+        SUMMARY_MERGER.out.summary,
+        PHYLOGENY.out.tree.map { _meta, tree -> tree }.ifEmpty(file("${projectDir}/assets/NO_TREE")).first()
+    )
+
     REPORT (
         SUMMARY_MERGER.out.summary,
         CLUSTERING.out.report,
         QC_ASSEMBLY.out.qc_report,
-        PLASMID_ANALYSIS.out.plasmid_summary
+        PLASMID_ANALYSIS.out.plasmid_summary,
+        SAMPLE_STATUS.out.tsv
     )
 
     VISUALIZATION (
