@@ -1,0 +1,37 @@
+nextflow_pipeline {
+
+    name "Pipeline -profile test: real reads (2 short, 1 hybrid, 1 long-only)"
+    script "../main.nf"
+    tag "pipeline"
+    tag "test_profile"
+
+    test("-profile test") {
+
+        when {
+            params {
+                outdir = "$outputDir"
+            }
+        }
+
+        then {
+            // Assemblers are not bit-reproducible, so check typing results instead of file snapshots.
+            // Expected values: https://github.com/alarawms/staphit2-test-data#readme
+            def lines  = new File("$outputDir/summary/combined_summary.tsv").readLines()
+            def header = lines[0].split('\t', -1) as List
+            def rows   = lines[1..-1].collect { l -> [header, l.split('\t', -1) as List].transpose().collectEntries() }
+                .collectEntries { r -> [ r.sample_id, r ] }
+            assertAll(
+                { assert workflow.success },
+                { assert rows.keySet() == ['SAMEA114040935', 'SAMEA114860840', 'SAMN15567915', 'SAMEA117686580'] as Set },
+                { assert rows.SAMEA114040935.mlst_st == '5' },
+                { assert rows.SAMEA114860840.mlst_st == '8' },
+                { assert rows.SAMEA114860840.sccmec_iwg == 'IV(2B)' },
+                { assert rows.SAMN15567915.mlst_st == '72' },
+                { assert rows.SAMN15567915.contigs as int <= 3 },        // hybrid assembly closes the chromosome
+                { assert rows.SAMEA117686580.mlst_st == '1535' },
+                { assert rows.SAMEA117686580.sccmec_iwg == 'V(5C2)' },
+                { assert path("$outputDir/iqtree").list().size() > 0 },
+            )
+        }
+    }
+}
