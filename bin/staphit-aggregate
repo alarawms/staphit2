@@ -106,7 +106,8 @@ def parse_trimmomatic(log_path):
         raw, surviving = s['before_filtering']['total_reads'], s['after_filtering']['total_reads']
         rate = (surviving / raw * 100) if raw > 0 else 0
         return {'raw_reads': raw, 'trimmed_reads': surviving, 'survival_rate': round(rate, 2),
-                'q30_rate': round(s['after_filtering']['q30_rate'] * 100, 2)}
+                'q30_rate': round(s['after_filtering']['q30_rate'] * 100, 2),
+                'trimmed_bases': s['after_filtering'].get('total_bases', 0)}
     # Try TrimGalore format first (pipeline default)
     raw_match = re.search(r'Total reads processed:\s+([\d,]+)', content)
     surv_match = re.search(r'Reads written \(passing filters\):\s+([\d,]+)', content)
@@ -313,6 +314,73 @@ def parse_kma(res_path, min_coverage=80.0, min_depth=0.5):
 
 
 # ---------------------------------------------------------------------------
+# AMR consensus (AMRFinderPlus + ResFinder via ABRicate + KMA on reads)
+# ---------------------------------------------------------------------------
+
+# ResFinder / KMA name -> AMRFinderPlus symbol, for the same S. aureus gene
+_AMR_SYNONYMS = {
+    "aac(6')-aph(2'')": "aac(6')-Ie/aph(2'')-Ia",
+    "aph(3')-III": "aph(3')-IIIa",
+    "aadD": "aadD1",
+    "blaPC1": "blaZ",          # AMRFinderPlus names some blaZ alleles blaPC1
+}
+
+
+def amr_family(name, tool):
+    """Gene family name shared by the three tools.
+
+    ResFinder (ABRicate) and KMA report `gene_allele[_accession]` (e.g. blaZ_138,
+    mecA_8_NC_002745); AMRFinderPlus reports the symbol (blaZ, erm(C)).
+    """
+    base = name if tool == 'amrfinder' else re.sub(r'_\d+(_.*)?$', '', name)
+    return _AMR_SYNONYMS.get(base, base)
+
+
+def amr_consensus(amrfinder, abricate, kma, kma_raw_ont=False, kma_ref_depth=None, kma_min_rel_depth=0.25):
+    """Combine the three AMR callers into (consensus, discordant, support).
+
+    AMRFinderPlus is the primary caller (curated S. aureus families, regulators,
+    fosB alleles ResFinder does not match); its genes are always reported.
+    A gene it missed is reported when ResFinder and KMA both find it. A gene only
+    one secondary tool finds is discordant (e.g. in the reads but not the
+    assembly, or a false positive). KMA on raw ONT reads (long-only samples) is
+    tagged kma-ont and never confirms a gene on its own vote.
+
+    With kma_ref_depth (the read depth KMA saw, x), a KMA hit below
+    kma_min_rel_depth of it is tagged kma-trace and does not count: a real
+    chromosomal gene sits near genome depth, while trace hits (a few % of it)
+    come from contamination or carry-over between samples.
+    """
+    support = {}
+    for item in amrfinder:
+        if item.get('gene') and (item.get('element_subtype') or '') != 'POINT' \
+                and (item.get('element_type') or 'AMR') == 'AMR':
+            support.setdefault(amr_family(item['gene'], 'amrfinder'), set()).add('amrfinder')
+    for item in abricate:
+        if item.get('gene'):
+            support.setdefault(amr_family(item['gene'], 'resfinder'), set()).add('resfinder')
+    for item in kma:
+        if not item.get('gene'):
+            continue
+        if kma_raw_ont:
+            tag = 'kma-ont'
+        elif kma_ref_depth and item.get('depth', 0) < kma_min_rel_depth * kma_ref_depth:
+            tag = 'kma-trace'
+        else:
+            tag = 'kma'
+        support.setdefault(amr_family(item['gene'], 'kma'), set()).add(tag)
+
+    consensus, discordant = [], []
+    for fam in sorted(support):
+        tools = support[fam]
+        if 'amrfinder' in tools or {'resfinder', 'kma'} <= tools:
+            consensus.append(fam)
+        else:
+            discordant.append(f"{fam}[{','.join(sorted(tools))}]")
+    return consensus, discordant, {k: sorted(v) for k, v in support.items()}
+
+
+# ---------------------------------------------------------------------------
 # Mutation profiling helpers
 # ---------------------------------------------------------------------------
 
@@ -357,7 +425,7 @@ SUMMARY_HEADERS = [
     'assembly_length', 'contigs', 'n50', 'gc_percent',
     'mlst_scheme', 'mlst_st',
     'spa_type', 'sccmec_type', 'agr_group',
-    'amrfinder_genes', 'abricate_genes', 'kma_genes',
+    'amrfinder_genes', 'abricate_genes', 'kma_genes', 'amr_consensus', 'amr_discordant',
     'point_mutations', 'geno_pheno_discordance',
     'virulence_genes', 'virulence_summary', 'plasmids',
     'infection_origin', 'ast_profile',
@@ -410,6 +478,10 @@ def build_summary_row(data):
         r['gene'] for r in data.get('resistance', {}).get('kma', []) if r.get('gene')
     }))
 
+    amr_cons = data.get('amr_consensus', {})
+    amr_consensus_str = ';'.join(amr_cons.get('consensus', []))
+    amr_discordant_str = ';'.join(amr_cons.get('discordant', []))
+
     point_mut_str = data.get('point_mutations', {}).get('_summary', '')
     gp = data.get('point_mutations', {}).get('genotype_phenotype', {})
     discordance_count = sum(1 for v in gp.values() if not v.get('concordant', True))
@@ -439,7 +511,7 @@ def build_summary_row(data):
         asm_len, contigs, n50, gc,
         mlst_scheme, mlst_st,
         spa_type, sccmec_type, agr_group,
-        amr_genes, abricate_genes, kma_genes,
+        amr_genes, abricate_genes, kma_genes, amr_consensus_str, amr_discordant_str,
         point_mut_str, geno_pheno_discord,
         vir_genes, virulence_summary, plasmids_str,
         infection_origin, ast_profile,
@@ -475,6 +547,12 @@ def main():
     parser.add_argument('--sccmec', help='SCCmec TSV output')
     parser.add_argument('--agr', help='Agr typing JSON output')
     parser.add_argument('--kma', help='KMA results file')
+    parser.add_argument('--genome-size', type=float, default=2.8e6, help='Expected genome size (bp) for read depth')
+    parser.add_argument('--target-depth', type=float, help='Rasusa target depth: KMA reads were subsampled to this')
+    parser.add_argument('--kma-min-rel-depth', type=float, default=0.25,
+                        help='KMA hits below this fraction of the read depth are trace (default 0.25)')
+    parser.add_argument('--kma-raw-ont', action='store_true',
+                        help='KMA ran on raw ONT reads (long-only sample): its calls cannot confirm a gene')
     parser.add_argument('--metadata', help='Metadata JSON file')
     parser.add_argument('--outdir', required=True, help='Output directory')
     args = parser.parse_args()
@@ -584,6 +662,18 @@ def main():
             data['resistance']['kma'] = parse_kma(args.kma)
         except Exception as e:
             print(f'Warning: KMA parse error: {e}', file=sys.stderr)
+
+    # AMR consensus across the three callers
+    # Depth KMA saw: trimmed Illumina depth, capped by the Rasusa subsampling target
+    ref_depth = None
+    if data['qc'].get('trimmed_bases'):
+        ref_depth = data['qc']['trimmed_bases'] / args.genome_size
+        if args.target_depth:
+            ref_depth = min(ref_depth, args.target_depth)
+    cons, disc, support = amr_consensus(data['resistance']['amrfinder'], data['resistance']['abricate'],
+                                        data['resistance']['kma'], kma_raw_ont=args.kma_raw_ont,
+                                        kma_ref_depth=ref_depth, kma_min_rel_depth=args.kma_min_rel_depth)
+    data['amr_consensus'] = {'consensus': cons, 'discordant': disc, 'support': support}
 
     # Write outputs
     os.makedirs(args.outdir, exist_ok=True)
