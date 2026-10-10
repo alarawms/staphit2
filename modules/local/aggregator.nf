@@ -26,8 +26,10 @@ process AGGREGATOR {
 
     script:
     def trim_file = trim_log instanceof List ? trim_log[0] : trim_log
+    // Long-only samples have no fastp log; their KMA input was raw ONT reads
+    def kma_ont   = trim_file.name == 'NO_TRIMLOG' ? '--kma-raw-ont' : ''
     """
-    # v7: sccmec typing mode + cassette columns; v6: typer mec-locus proximity; v5: sccmec IWG columns; v4: harmonized year/host/source/sccmec_group columns; v3: fastp parser + metadata summary columns (bump to force re-aggregation after bin/staphit-aggregate changes)
+    # v8: AMR consensus columns; v7: sccmec typing mode + cassette columns; v6: typer mec-locus proximity; v5: sccmec IWG columns; v4: harmonized year/host/source/sccmec_group columns; v3: fastp parser + metadata summary columns (bump to force re-aggregation after bin/staphit-aggregate changes)
     staphit-aggregate \
         --sample-id ${meta.id} \
         --trim-log ${trim_file} \
@@ -40,7 +42,8 @@ process AGGREGATOR {
         --spa ${spa_report} \
         --sccmec ${sccmec_report} \
         --agr ${agr_report} \
-        --kma kma_input.res \
+        --kma kma_input.res ${kma_ont} \
+        --genome-size ${params.genome_size} --target-depth ${params.target_depth} \
         --metadata ${metadata_json} \
         --outdir .
     """
