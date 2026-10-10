@@ -36,6 +36,7 @@ process SNIPPY_CORE {
 
     output:
     path "core.aln", emit: aln
+    path "core.full.aln", emit: full_aln   // whole-genome alignment (for Gubbins)
     tuple val("${task.process}"), val('snippy'), eval("snippy --version 2>&1 | sed 's/^snippy //'"), topic: versions, emit: versions_snippy
 
     script:
@@ -78,5 +79,6 @@ process SNIPPY_CORE {
     stub:
     """
     printf ">Reference\\nACGTACGT\\n>s1\\nACGTACGA\\n>s2\\nACTTACGT\\n" > core.aln
+    cp core.aln core.full.aln
     """
 }

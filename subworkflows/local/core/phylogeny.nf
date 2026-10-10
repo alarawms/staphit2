@@ -17,7 +17,8 @@ include { FASTTREE           } from '../../../modules/local/fasttree'
 include { IQTREE             } from '../../../modules/nf-core/iqtree/main'
 include { SNPDISTS as SNPDISTS_CORE   } from '../../../modules/nf-core/snpdists/main'
 include { SNPDISTS as SNPDISTS_SNIPPY } from '../../../modules/nf-core/snpdists/main'
-include { BEAST2                      } from '../../../modules/local/beast2'
+include { BEAST2_PREP; BEAST2         } from '../../../modules/local/beast2'
+include { GUBBINS                     } from '../../../modules/local/gubbins'
 
 workflow PHYLOGENY {
 
@@ -83,11 +84,11 @@ workflow PHYLOGENY {
             ch_metadata = params.metadata
                 ? channel.fromPath(params.metadata, checkIfExists: true)
                 : channel.fromPath("${projectDir}/assets/NO_METADATA")
-            BEAST2(
-                SNIPPY_CORE.out.aln,
-                ch_metadata,
-                channel.value(file("${projectDir}/bin/beast2_prep.py"))
-            )
+            // Mask recombination (Gubbins) and pass invariant-site counts so BEAST2 dates
+            // vertical descent only and corrects for an alignment of variable sites
+            GUBBINS ( SNIPPY_CORE.out.full_aln )
+            BEAST2_PREP ( GUBBINS.out.snps, GUBBINS.out.constant, ch_metadata )
+            BEAST2 ( BEAST2_PREP.out.xml )
             ch_beast2_tree = BEAST2.out.mcc_tree
         }
 

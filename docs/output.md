@@ -375,6 +375,26 @@ When `--tree_builder fasttree` is selected, output appears in `fasttree/` contai
 
 [SNP-dists](https://github.com/tseemann/snp-dists) computes pairwise SNP distances from the core genome alignment. This matrix is consumed by the clustering module and is also useful for manual inspection of isolate relatedness.
 
+### gubbins/ and beast2/ (`--use_beast`)
+
+<details markdown="1">
+<summary>Output files</summary>
+
+- `gubbins/`
+  - `gubbins.recombination_predictions.gff`: Recombinant regions per branch.
+  - `gubbins.per_branch_statistics.csv`: SNPs inside / outside recombination, r/m per branch.
+  - `gubbins.final_tree.tre`: Recombination-aware ML tree.
+  - `snps.masked.fasta`: Variable sites after masking recombination (BEAST2 input).
+  - `constant_sites.txt`: Invariant A C G T counts of the masked alignment.
+- `beast2/`
+  - `beast_run.xml`: BEAST 2.7 input (HKY+Γ4, strict clock, constant-size coalescent).
+  - `beast_run.log`, `beast_run.trees`: MCMC trace and sampled trees (check ESS in [Tracer](https://github.com/beast-dev/tracer)).
+  - `beast_mcc.tree`: Maximum clade credibility tree with mean node heights.
+
+</details>
+
+With `--use_beast` (and `--phylo_method snippy` or `both`), [Gubbins](https://github.com/nickjcroucher/gubbins) masks recombination in the whole-genome Snippy alignment before dating, so only vertically inherited mutations inform the clock. The invariant-site counts are passed to BEAST2 (`constantSiteWeights`) so rates are not inflated by analysing variable sites only. When every sample has a `collection_date` in `--metadata` the clock rate is estimated (lognormal prior centred on 1e-6 substitutions/site/year) and the tree is time-scaled; otherwise the clock is fixed and branch lengths are substitutions/site. Default chain length (`--beast_chain_length`, 10 M) is a starting point: check convergence before using dates.
+
 ### itol/
 
 <details markdown="1">
