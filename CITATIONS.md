@@ -108,6 +108,10 @@
 
   > Silva M, et al. chewBBACA: A complete suite for gene-by-gene schema creation and strain identification. Microb Genom. 2018;4(3):e000166.
 
+- [Gubbins](https://github.com/nickjcroucher/gubbins)
+
+  > Croucher NJ, Page AJ, Connor TR, et al. Rapid phylogenetic analysis of large samples of recombinant bacterial whole genome sequences using Gubbins. Nucleic Acids Res. 2015;43(3):e15.
+
 - [BEAST 2](https://www.beast2.org)
 
   > Bouckaert R, et al. BEAST 2.5: An advanced software platform for Bayesian evolutionary analysis. PLoS Comput Biol. 2019;15(4):e1006650.

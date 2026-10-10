@@ -40,7 +40,7 @@ A1–A11: branch `chore/nf-core-standards`. Notes:
 - [x] **B5** `report/sample_status.tsv` + _Sample Status_ report section: every input sample with the stage and reason it was dropped (on the 703-sample run: 17 QC gate, 1 non-_S. aureus_, 1 empty assembly)
 - [ ] **B6** ONT-only polishing: Medaka by default with model from the FASTQ header; flag truncated genes
 - [ ] **B7** Assembler choice: SKESA fragments repeat regions (246/684 split SCCmec cassettes); evaluate SPAdes/shovill
-- [ ] **B8** Recombination masking (Gubbins/ClonalFrameML) before BEAST2 dating; also the BEAST2 container has no Python for `beast2_prep.py` (split prep into its own process)
+- [x] **B8** `--use_beast`: Gubbins masks recombination on snippy-core's whole-genome alignment; BEAST2 gets the masked SNPs plus invariant-site counts (`constantSiteWeights`); XML rewritten for BEAST 2.7 (the old one never parsed); prep runs in the Python image; BEAST runs under Docker `-u` (user.home)
 - [ ] **B9** Consensus _S. aureus_ resistance calls across AMRFinderPlus / ResFinder / KMA (down-weight KMA on raw ONT)
 - [x] **B10** Species QC reports best and second-best bacterial species (Mash screen -w on every assembly, phage/plasmid hits ignored) and flags `possible_contamination` (≥0.90 identity, ≥100/1000 hashes); within-species mixtures remain for B2
 - [ ] **B11** Cluster thresholds: document scheme per threshold (PubMLST scheme 20, 1,716 loci); recalibrate on known outbreaks
