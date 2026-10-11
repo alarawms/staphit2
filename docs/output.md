@@ -482,6 +482,15 @@ The aggregator (`bin/staphit-aggregate`) merges all upstream results into a sing
 
 A single wide-format table with one row per sample and columns for every typing result, resistance gene, virulence marker, and QC metric. This file is designed for direct import into spreadsheet software or downstream statistical analysis.
 
+**AMR consensus.** Three tools look for resistance genes: AMRFinderPlus and ResFinder (via ABRicate) on the assembly, and KMA on the reads. Their raw calls stay in `amrfinder_genes`, `abricate_genes` and `kma_genes`. Two columns combine them:
+
+| Column           | Meaning                                                                                                                                                                                                                                                                                                                                                  |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `amr_consensus`  | Every AMRFinderPlus gene (primary caller: curated _S. aureus_ families, regulators, `fosB` alleles ResFinder does not match), plus genes ResFinder and KMA both find                                                                                                                                                                                     |
+| `amr_discordant` | Genes only one secondary tool found, tagged by source: `[resfinder]`, `[kma]` (full depth, not in the assembly), `[kma-trace]` (KMA depth below 25% of the read depth: contamination or carry-over, not a gene of the isolate), `[kma-ont]` (KMA on raw ONT reads of a long-only sample; often a small high-copy plasmid missing from the Flye assembly) |
+
+Gene names are matched across tools by family (allele numbers and accessions removed; e.g. `aac(6')-aph(2'')` = `aac(6')-Ie/aph(2'')-Ia`, `blaPC1` = `blaZ`). Per-gene support is in each sample's `aggregated/<sample>_report.json` (`amr_consensus.support`).
+
 ### clusters/
 
 <details markdown="1">
