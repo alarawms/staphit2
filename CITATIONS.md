@@ -108,6 +108,22 @@
 
   > Silva M, et al. chewBBACA: A complete suite for gene-by-gene schema creation and strain identification. Microb Genom. 2018;4(3):e000166.
 
+- _S. aureus_ cgMLST and thresholds
+
+  > Leopold SR, Goering RV, Witten A, Harmsen D, Mellmann A. Bacterial whole-genome sequencing revisited: portable, scalable, and standardized analysis for typing and detection of virulence and antibiotic resistance genes. J Clin Microbiol. 2014;52(7):2365-2370.
+
+  > Coll F, Raven KE, Knight GM, et al. Definition of a genetic relatedness cutoff to exclude recent transmission of meticillin-resistant Staphylococcus aureus: a genomic epidemiology analysis. Lancet Microbe. 2020;1(8):e328-e335.
+
+- [minimap2](https://github.com/lh3/minimap2), [SAMtools and BCFtools](https://www.htslib.org) (mixed-strain check)
+
+  > Li H. Minimap2: pairwise alignment for nucleotide sequences. Bioinformatics. 2018;34(18):3094-3100.
+
+  > Danecek P, Bonfield JK, Liddle J, et al. Twelve years of SAMtools and BCFtools. GigaScience. 2021;10(2):giab008.
+
+- [BLAST+](https://blast.ncbi.nlm.nih.gov) (truncated-gene check)
+
+  > Camacho C, Coulouris G, Avagyan V, et al. BLAST+: architecture and applications. BMC Bioinformatics. 2009;10:421.
+
 - [Gubbins](https://github.com/nickjcroucher/gubbins)
 
   > Croucher NJ, Page AJ, Connor TR, et al. Rapid phylogenetic analysis of large samples of recombinant bacterial whole genome sequences using Gubbins. Nucleic Acids Res. 2015;43(3):e15.

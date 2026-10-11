@@ -333,6 +333,24 @@
                     "minimum": 0,
                     "description": "Flag assemblies with an N50 below this (bp). Flag only."
                 },
+                "max_mixed_sites": {
+                    "type": "integer",
+                    "default": 800,
+                    "minimum": 0,
+                    "description": "Flag a mixed S. aureus culture above this many sites where >=10% of the short reads disagree with the sample's own assembly. Flag only."
+                },
+                "max_cgmlst_missing": {
+                    "type": "integer",
+                    "default": 86,
+                    "minimum": 0,
+                    "description": "Flag samples with more cgMLST loci than this without an allele call (86 = 5% of 1,716). Flag only."
+                },
+                "max_truncated_genes": {
+                    "type": "integer",
+                    "default": 80,
+                    "minimum": 0,
+                    "description": "Flag long-only assemblies with more proteins than this shorter than 90% of the NCTC 8325 protein (frameshifts from ONT errors). Flag only."
+                },
                 "assembler": {
                     "type": "string",
                     "default": "skesa",
@@ -363,7 +381,14 @@
                 },
                 "medaka_model": {
                     "type": "string",
-                    "description": "Medaka model for long-read polishing (e.g. r1041_e82_400bps_sup_v5.0.0). Omit to skip Medaka"
+                    "default": "auto",
+                    "description": "Medaka polishing of long-only assemblies: 'auto' (model from the read headers, else Medaka's R10.4.1 SUP model; skipped below --medaka_min_read_q), 'none', or a Medaka model name (then also used for hybrid assemblies)."
+                },
+                "medaka_min_read_q": {
+                    "type": "number",
+                    "default": 10,
+                    "minimum": 0,
+                    "description": "With --medaka_model auto, skip Medaka when the NanoPlot median read quality is below this (the default model truncated more genes than it fixed on Q8 reads)."
                 },
                 "mash_db": {
                     "type": "string",
@@ -502,17 +527,45 @@
             "title": "Outbreak clustering options",
             "type": "object",
             "fa_icon": "fas fa-network-wired",
-            "description": "Tiered outbreak clustering thresholds.",
+            "description": "Tiered outbreak clustering on cgMLST allele or SNP distances.",
             "properties": {
-                "cluster_snp_tiers": {
+                "cluster_by": {
                     "type": "string",
-                    "default": "15,50,200",
-                    "description": "Core gene SNP thresholds for direct transmission, outbreak, related tiers (comma-separated). Calibrated for Panaroo core gene alignment (~2M columns). For WGS reference-mapped distances use 5,15,40."
+                    "default": "cgmlst",
+                    "enum": ["cgmlst", "snp", "both"],
+                    "description": "Distances to cluster on: cgmlst (default; falls back to SNPs with --skip_cgmlst), snp, or both (same cluster if either links them)."
                 },
                 "cluster_cgmlst_tiers": {
                     "type": "string",
                     "default": "10,24,50",
-                    "description": "cgMLST allelic difference thresholds (comma-separated)."
+                    "description": "cgMLST allele-difference thresholds for the direct transmission, outbreak and related tiers, on PubMLST scheme 20 (1,716 loci). See docs/usage.md#outbreak-clustering for sources."
+                },
+                "cluster_snp_tiers": {
+                    "type": "string",
+                    "default": "15,50,200",
+                    "description": "SNP thresholds (comma-separated) used with --cluster_by snp|both, and for transmission pairs. Calibrated for the Panaroo core-gene alignment; for Snippy whole-genome distances (--phylo_method snippy) use 5,15,40."
+                },
+                "skip_cgmlst": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Skip cgMLST (schema download ~840 MB, allele calling); clustering then uses SNP distances."
+                },
+                "cgmlst_schema": {
+                    "type": "string",
+                    "format": "directory-path",
+                    "description": "Prepared chewBBACA schema (e.g. <outdir>/databases/cgmlst_schema/prepared_schema from an earlier run). Default: download from PubMLST."
+                },
+                "cgmlst_pubmlst_db": {
+                    "type": "string",
+                    "default": "pubmlst_saureus_seqdef",
+                    "hidden": true,
+                    "description": "PubMLST sequence definition database for the cgMLST scheme download."
+                },
+                "cgmlst_pubmlst_scheme": {
+                    "type": "integer",
+                    "default": 20,
+                    "hidden": true,
+                    "description": "PubMLST scheme id (20 = S. aureus cgMLST, 1,716 loci)."
                 }
             }
         },

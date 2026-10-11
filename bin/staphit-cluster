@@ -171,13 +171,22 @@ def merge_cluster_assignments(snp_tiers, cgmlst_tiers, snp_thresholds,
 # ---------------------------------------------------------------------------
 
 
-def build_cluster_report(merged, summary_data, snp_matrix, tier_thresholds=None):
+def _diameter(matrix, members):
+    return max((matrix.get((a, b), matrix.get((b, a), 0))
+                for i, a in enumerate(members) for b in members[i + 1:]), default=0)
+
+
+def build_cluster_report(merged, summary_data, snp_matrix, tier_thresholds=None,
+                         cgmlst_matrix=None, chain_matrix=None):
     """Build a report for each multi-sample cluster.
 
     For each cluster with >1 sample: date_range, locations,
     shared_st, shared_spa, shared_resistance (from amrfinder_genes),
-    max_snp_distance.
+    max_snp_distance (and max_cgmlst_distance with cgMLST). chain_linked compares the
+    diameter in chain_matrix (the distances clustered on; default SNPs) with the tier
+    thresholds.
     """
+    chain_matrix = snp_matrix if chain_matrix is None else chain_matrix
     # Index summary_data by sample_id
     summary_by_id = {}
     if summary_data:
@@ -250,13 +259,10 @@ def build_cluster_report(merged, summary_data, snp_matrix, tier_thresholds=None)
             else:
                 cluster_info['shared_resistance'] = []
 
-            # Max SNP distance within cluster
-            max_dist = 0
-            for i, s1 in enumerate(members):
-                for s2 in members[i + 1:]:
-                    d = snp_matrix.get((s1, s2), snp_matrix.get((s2, s1), 0))
-                    max_dist = max(max_dist, d)
-            cluster_info['max_snp_distance'] = max_dist
+            cluster_info['max_snp_distance'] = _diameter(snp_matrix, members)
+            if cgmlst_matrix:
+                cluster_info['max_cgmlst_distance'] = _diameter(cgmlst_matrix, members)
+            max_dist = _diameter(chain_matrix, members)
             # Flag chain-linked clusters where diameter > 2x tier threshold
             tier_names_list = ['direct_transmission', 'outbreak', 'related']
             if tier_thresholds and tier_name in tier_names_list:
@@ -346,6 +352,9 @@ def main():
                         help='Comma-separated SNP thresholds (default: 5,15,40)')
     parser.add_argument('--cgmlst-tiers', default='10,24,50',
                         help='Comma-separated cgMLST thresholds (default: 10,24,50)')
+    parser.add_argument('--method', choices=['cgmlst', 'snp', 'both'], default='cgmlst',
+                        help='Distances to cluster on: cgmlst (default; SNPs if no cgMLST '
+                             'distances are given), snp, or both (same cluster in either)')
     parser.add_argument('-o', '--output', required=True,
                         help='Output directory')
     args = parser.parse_args()
@@ -365,9 +374,14 @@ def main():
     # All samples (union)
     all_samples = sorted(set(snp_samples) | set(cgmlst_samples))
 
-    # Tiered clustering
-    snp_tiers = assign_tiered_clusters(snp_matrix, all_samples, snp_thresholds)
-    cgmlst_tiers = assign_tiered_clusters(cgmlst_matrix, all_samples, cgmlst_thresholds)
+    method = args.method
+    if method == 'cgmlst' and not cgmlst_matrix:
+        print('WARNING: no cgMLST distances; clustering on SNP distances', file=sys.stderr)
+        method = 'snp'
+
+    # Tiered clustering (an empty tier list leaves that distance type out of the merge)
+    snp_tiers = assign_tiered_clusters(snp_matrix, all_samples, snp_thresholds) if method != 'cgmlst' else []
+    cgmlst_tiers = assign_tiered_clusters(cgmlst_matrix, all_samples, cgmlst_thresholds) if method != 'snp' else []
 
     # Merge
     merged = merge_cluster_assignments(snp_tiers, cgmlst_tiers,
@@ -379,7 +393,10 @@ def main():
 
     # Build report
     report = build_cluster_report(merged, summary_data, snp_matrix,
-                                   tier_thresholds=snp_thresholds)
+                                   tier_thresholds=cgmlst_thresholds if method == 'cgmlst' else snp_thresholds,
+                                   cgmlst_matrix=cgmlst_matrix,
+                                   chain_matrix=cgmlst_matrix if method == 'cgmlst' else snp_matrix)
+    print(f'Clustered on {method} distances', file=sys.stderr)
 
     # Transmission pairs (using first SNP threshold = direct transmission)
     pairs = find_transmission_pairs(snp_matrix, snp_thresholds[0], summary_data)

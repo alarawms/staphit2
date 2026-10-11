@@ -123,6 +123,7 @@ workflow PHYLOGENY {
 
     emit:
     prokka_gff    = PROKKA.out.gff        // [ val(meta), path(gff) ]
+    prokka_faa    = PROKKA.out.faa        // [ val(meta), path(faa) ]
     tree          = ch_tree               // [ val(meta), path(treefile) ]
     snp_dists     = SNPDISTS_CORE.out.tsv // [ val(meta), path(tsv) ] — for tree visualization
     cluster_dists = ch_cluster_dists      // [ val(meta), path(tsv) ] — for outbreak clustering
