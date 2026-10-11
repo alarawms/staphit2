@@ -1,5 +1,5 @@
 name: "chewbbaca"
-description: Perform cgMLST allele calling, profile joining, and distance calculation using chewBBACA (CHEWBBACA_PREP + CHEWBBACA_ALLELE + CHEWBBACA_JOIN + CGMLST_DISTS)
+description: cgMLST with the PubMLST S. aureus scheme (CGMLST_SCHEMA download, CHEWBBACA_PREP, one CHEWBBACA_ALLELE run for all samples, CGMLST_DISTS allele distances)
 keywords:
   - cgmlst
   - allele calling
@@ -13,49 +13,45 @@ tools:
       documentation: https://chewbbaca.readthedocs.io
       licence: ["GPL-3.0"]
 input:
-  - name: meta
-    type: map
-    description: Groovy Map containing sample information (id)
-  - name: assembly
-    type: file
-    description: Genome assembly FASTA file
-    pattern: "*.fasta"
   - name: schema_fasta_dir
     type: directory
-    description: Directory containing cgMLST schema locus FASTA files (CHEWBBACA_PREP input)
-    pattern: "*"
+    description: One allele FASTA per locus from PubMLST (CHEWBBACA_PREP input)
+    pattern: "schema_fasta"
+  - name: ids
+    type: list
+    description: Sample IDs, in the same order as the assemblies (CHEWBBACA_ALLELE input)
+  - name: assemblies
+    type: file
+    description: Genome assemblies of all samples, plain or gzipped FASTA (CHEWBBACA_ALLELE input)
+    pattern: "*.{fasta,fa,fa.gz}"
   - name: schema
     type: directory
-    description: Prepared chewBBACA schema directory (CHEWBBACA_ALLELE input)
+    description: Prepared chewBBACA schema (CHEWBBACA_ALLELE input)
     pattern: "prepared_schema"
   - name: profiles
     type: file
-    description: Collection of allele profile TSVs (CHEWBBACA_JOIN and CGMLST_DISTS input)
-    pattern: "*.tsv"
+    description: chewBBACA allele matrix (CGMLST_DISTS input)
+    pattern: "results_alleles.tsv"
 output:
+  - name: fasta
+    type: directory
+    description: Downloaded scheme, one FASTA per locus (CGMLST_SCHEMA output)
+    pattern: "schema_fasta"
   - name: schema
     type: directory
     description: Prepared chewBBACA schema (CHEWBBACA_PREP output)
     pattern: "prepared_schema"
-  - name: profile
-    type: file
-    description: Per-sample allele profile (CHEWBBACA_ALLELE output)
-    pattern: "results/results_alleles.tsv"
-  - name: stats
-    type: file
-    description: Per-sample allele calling statistics (CHEWBBACA_ALLELE output)
-    pattern: "results/results_statistics.tsv"
   - name: profiles
     type: file
-    description: Joined allele profiles for all samples (CHEWBBACA_JOIN output)
-    pattern: "cgmlst_profiles.tsv"
-  - name: cgmlst_stats
+    description: Allele call per sample and locus (CHEWBBACA_ALLELE output)
+    pattern: "results_alleles.tsv"
+  - name: stats
     type: file
-    description: cgMLST locus call statistics per sample (CHEWBBACA_JOIN output)
-    pattern: "cgmlst_stats.tsv"
-  - name: distances
+    description: chewBBACA classification counts per sample (CHEWBBACA_ALLELE) or loci called/missing per sample (CGMLST_DISTS)
+    pattern: "{results_statistics,cgmlst_stats}.tsv"
+  - name: dists
     type: file
-    description: Pairwise cgMLST allelic distance matrix (CGMLST_DISTS output)
+    description: Pairwise allele differences (CGMLST_DISTS output)
     pattern: "cgmlst_distances.tsv"
 authors:
   - "@alarawms"

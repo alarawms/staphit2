@@ -1,0 +1,72 @@
+#!/usr/bin/env python3
+"""staphit-calibrate-thresholds: choose cluster thresholds from known outbreaks.
+
+    staphit-calibrate-thresholds <outdir>/cgmlst/cgmlst_distances.tsv outbreaks.tsv [--max 100]
+
+outbreaks.tsv: sample_id<TAB>outbreak, one row per sample whose status is known. Samples
+with the same outbreak label are epidemiologically linked; `sporadic` (or empty) marks a
+sample linked to no one. Samples not in the file are ignored.
+
+For every threshold t from 0 to --max, prints the share of linked pairs at <= t
+(sensitivity), the share of unlinked pairs at > t (specificity) and Youden's J, then the
+t with the highest J. Use it on cgMLST distances for --cluster_cgmlst_tiers or on SNP
+distances (snpdists/) for --cluster_snp_tiers.
+"""
+import argparse
+import csv
+import sys
+
+
+def read_matrix(path):
+    with open(path) as fh:
+        rows = list(csv.reader(fh, delimiter='\t'))
+    cols = rows[0][1:]
+    return {(r[0], c): int(v) for r in rows[1:] for c, v in zip(cols, r[1:])}
+
+
+def labelled_pairs(dist, labels):
+    """-> (distances of linked pairs, distances of unlinked pairs)"""
+    ids = sorted(s for s in labels if (s, s) in dist)
+    linked, unlinked = [], []
+    for i, a in enumerate(ids):
+        for b in ids[i + 1:]:
+            la, lb = labels[a], labels[b]
+            same = la == lb and la not in ('', 'sporadic')
+            (linked if same else unlinked).append(dist[(a, b)])
+    return linked, unlinked
+
+
+def sweep(linked, unlinked, max_t):
+    out = []
+    for t in range(max_t + 1):
+        sens = sum(d <= t for d in linked) / len(linked)
+        spec = sum(d > t for d in unlinked) / len(unlinked)
+        out.append((t, sens, spec, sens + spec - 1))
+    return out
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument('distances')
+    ap.add_argument('outbreaks')
+    ap.add_argument('--max', type=int, default=100, help='largest threshold to test')
+    a = ap.parse_args(argv)
+
+    dist = read_matrix(a.distances)
+    with open(a.outbreaks) as fh:
+        labels = {r[0]: (r[1].strip() if len(r) > 1 else '') for r in csv.reader(fh, delimiter='\t')
+                  if r and r[0] != 'sample_id'}
+    linked, unlinked = labelled_pairs(dist, labels)
+    if not linked or not unlinked:
+        sys.exit('ERROR: need at least one linked and one unlinked pair among samples in the matrix')
+    rows = sweep(linked, unlinked, a.max)
+    print('threshold\tsensitivity\tspecificity\tyouden_j')
+    for t, sens, spec, j in rows:
+        print(f'{t}\t{sens:.3f}\t{spec:.3f}\t{j:.3f}')
+    best = max(rows, key=lambda r: (r[3], -r[0]))
+    print(f'# {len(linked)} linked / {len(unlinked)} unlinked pairs; best threshold {best[0]} '
+          f'(sensitivity {best[1]:.2f}, specificity {best[2]:.2f})', file=sys.stderr)
+
+
+if __name__ == '__main__':
+    main()

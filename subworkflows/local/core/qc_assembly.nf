@@ -5,7 +5,7 @@
     Read mode is auto-detected per sample (meta.mode):
       short  : fastp -> Rasusa -> FastQC -> SKESA/SPAdes
       hybrid : short-read QC as above + NanoPlot -> Dragonflye (Flye + Polypolish)
-      long   : NanoPlot -> Dragonflye (Flye + Racon[/Medaka])
+      long   : NanoPlot -> Dragonflye (Flye + Racon + Medaka, model from the read headers)
     All assemblies -> QUAST -> CheckM2 -> QC Gate
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
@@ -65,14 +65,18 @@ workflow QC_ASSEMBLY {
         ch_short_scaffolds = SKESA.out.scaffolds
     }
 
-    // Long-only: Flye; hybrid: Flye + Polypolish with the trimmed short reads
+    // Long-only: Flye + Medaka; hybrid: Flye + Polypolish with the trimmed short reads.
+    // Medaka needs the NanoPlot median read quality (skipped below --medaka_min_read_q).
+    ch_long_q = NANOPLOT.out.stats.map { meta, stats -> [ meta.id, medianReadQ(stats) ] }
     ch_dragonflye_in = ch_long.filter { meta, _lr -> meta.mode == 'long' }
-        .map { meta, lr -> [ meta, lr, [] ] }
+        .map { meta, lr -> [ meta.id, meta, lr ] }
+        .join(ch_long_q)
+        .map { _id, meta, lr, q -> [ meta, lr, [], medakaModel(params.medaka_model, 'long', q, params.medaka_min_read_q) ] }
         .mix(
             ch_long.filter { meta, _lr -> meta.mode == 'hybrid' }
                 .map { meta, lr -> [ meta.id, meta, lr ] }
                 .join(ch_trimmed.map { meta, sr -> [ meta.id, sr ] })
-                .map { _id, meta, lr, sr -> [ meta, lr, sr ] }
+                .map { _id, meta, lr, sr -> [ meta, lr, sr, medakaModel(params.medaka_model, 'hybrid', null, params.medaka_min_read_q) ] }
         )
     DRAGONFLYE ( ch_dragonflye_in )
 
@@ -162,4 +166,23 @@ def assemblyLength(fasta) {
     def n = 0L
     fasta.eachLine { line -> if (!line.startsWith('>')) { n += line.trim().length() } }
     return n
+}
+
+def medianReadQ(stats) {
+    def line = stats.readLines().find { l -> l.startsWith('Median read quality:') }
+    return line ? (line.split(':')[1].trim().replace(',', '') as Double) : 0.0
+}
+
+// Medaka model for DRAGONFLYE: 'auto' (default) polishes long-only samples whose reads reach
+// minQ (on Q8 reads the default model truncated more genes than it fixed; hybrids get
+// Polypolish instead); 'none' turns Medaka off; any other value is a model for every long-read sample
+def medakaModel(requested, mode, readQ, minQ) {
+    def model = requested ? requested.toString() : 'none'
+    if (model == 'none') {
+        return ''
+    }
+    if (model != 'auto') {
+        return model
+    }
+    return mode == 'long' && readQ >= minQ ? 'auto' : ''
 }

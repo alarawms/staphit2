@@ -25,6 +25,8 @@ process SAMPLE_STATUS {
         --min-size ${params.min_assembly_size} --max-size ${params.max_assembly_size} \\
         --min-depth-short ${params.min_depth_short} --min-depth-long ${params.min_depth_long} \\
         --max-contigs ${params.max_contigs} --min-n50 ${params.min_n50} \\
+        --max-mixed-sites ${params.max_mixed_sites} --max-cgmlst-missing ${params.max_cgmlst_missing} \\
+        --max-truncated ${params.max_truncated_genes} \\
         --summary-out combined_summary.tsv \\
         -o sample_status.tsv
     """

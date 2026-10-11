@@ -22,6 +22,8 @@ def test_every_drop_reason(tmp_path):
         *[f'assembled\t{s}' for s in ['OK', 'SMALL', 'LOWQC', 'NOTSA', 'NOTYPE', 'NOTREE']],
         'size\tSMALL\t120000',
         'size\tOK\t2800000', 'depth_short\tOK\t95.0', 'depth_short\tNOTREE\t23.4', 'depth_long\tNOTREE\t12.0',
+        'mixed_sites\tNOTREE\t20920\t0.153', 'mixed_sites\tOK\t171\t0.110',
+        'cgmlst_missing\tNOTREE\t319', 'cgmlst_missing\tOK\t34', 'truncated\tNOTREE\t108', 'truncated\tOK\t45',
         *[f'size_pass\t{s}' for s in ['OK', 'LOWQC', 'NOTSA', 'NOTYPE', 'NOTREE']],
         *[f'qc_pass\t{s}' for s in ['OK', 'NOTSA', 'NOTYPE', 'NOTREE']],
         *[f'species_pass\t{s}' for s in ['OK', 'NOTYPE', 'NOTREE']],
@@ -47,7 +49,8 @@ def test_every_drop_reason(tmp_path):
     assert rows['NOTREE']['status'] == 'not_in_tree'
     # kept samples are flagged, dropped ones are not
     assert rows['OK']['flags'] == ''
-    assert rows['NOTREE']['flags'] == 'low_depth_short:23x;low_depth_long:12x;contigs:1096;n50:5.2kb'
+    assert rows['NOTREE']['flags'] == ('low_depth_short:23x;low_depth_long:12x;contigs:1096;n50:5.2kb;'
+                                       'mixed_strains:20920_sites,minor_15%;cgmlst_missing:319;truncated_genes:108')
     assert rows['SMALL']['flags'] == ''
     summary = {r['sample_id']: r for r in csv.DictReader(flagged.open(), delimiter='\t')}
     assert summary['NOTREE']['qc_flags'].startswith('low_depth_short') and summary['OK']['qc_flags'] == ''

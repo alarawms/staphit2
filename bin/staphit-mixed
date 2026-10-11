@@ -1,0 +1,54 @@
+#!/usr/bin/env python3
+"""staphit-mixed: count mixed (heterozygous) sites from reads mapped back to their own assembly.
+
+    bcftools mpileup -a AD ... | bcftools query -f '[%AD]\\n' | staphit-mixed <sample_id> > mixed.tsv
+
+A haploid single-strain culture mapped to its own assembly agrees with itself almost
+everywhere; a mix of two S. aureus strains shows a second allele at every position where
+the strains differ (thousands for different lineages). ConFindr-style, but genome-wide and
+without the rMLST database.
+
+A site counts when depth >= --min-depth and the second most common base has
+>= --min-reads reads and >= --min-maf of the depth. The median minor-allele fraction of
+those sites estimates the minor strain's share. Runs in the Snippy image (Python 3.6).
+
+Output TSV: sample_id, sites_assessed, mixed_sites, minor_fraction
+(staphit-sample-status flags samples above --max_mixed_sites)
+"""
+import argparse
+import statistics
+import sys
+
+
+def count_mixed(ad_lines, min_depth=20, min_reads=5, min_maf=0.1):
+    """-> (sites assessed, mixed sites, median minor-allele fraction of mixed sites)"""
+    assessed, fractions = 0, []
+    for line in ad_lines:
+        line = line.strip()
+        if not line or line == '.':
+            continue
+        counts = sorted((int(c) for c in line.split(',') if c != '.'), reverse=True)
+        depth = sum(counts)
+        if depth < min_depth:
+            continue
+        assessed += 1
+        minor = counts[1] if len(counts) > 1 else 0
+        if minor >= min_reads and minor >= min_maf * depth:
+            fractions.append(minor / depth)
+    return assessed, len(fractions), (statistics.median(fractions) if fractions else 0.0)
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument('sample_id')
+    ap.add_argument('--min-depth', type=int, default=20)
+    ap.add_argument('--min-reads', type=int, default=5)
+    ap.add_argument('--min-maf', type=float, default=0.1)
+    a = ap.parse_args(argv)
+    assessed, mixed, frac = count_mixed(sys.stdin, a.min_depth, a.min_reads, a.min_maf)
+    print('sample_id\tsites_assessed\tmixed_sites\tminor_fraction')
+    print('{}\t{}\t{}\t{:.3f}'.format(a.sample_id, assessed, mixed, frac))
+
+
+if __name__ == '__main__':
+    main()

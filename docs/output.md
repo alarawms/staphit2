@@ -98,7 +98,7 @@ The pipeline is built using [Nextflow](https://www.nextflow.io/) and processes d
 
 </details>
 
-[Dragonflye](https://github.com/rpetit3/dragonflye) assembles `long` and `hybrid` samples with [Flye](https://github.com/fenderglass/Flye), polishes with [Racon](https://github.com/lbcb-sci/racon), then with the Illumina reads for hybrid samples ([Polypolish](https://github.com/rrwick/Polypolish)) or with [Medaka](https://github.com/nanoporetech/medaka) for long-only samples when `--medaka_model` is set. The contigs go into the same downstream steps as short-read assemblies. Samples whose assembly is below 500 kb are dropped before QC.
+[Dragonflye](https://github.com/rpetit3/dragonflye) assembles `long` and `hybrid` samples with [Flye](https://github.com/fenderglass/Flye), polishes with [Racon](https://github.com/lbcb-sci/racon), then with the Illumina reads for hybrid samples ([Polypolish](https://github.com/rrwick/Polypolish)) or with [Medaka](https://github.com/nanoporetech/medaka) for long-only samples. Medaka uses the basecaller model named in the read headers; reads without one (ENA strips them) get Medaka's R10.4.1 SUP model, and samples with a median read quality below `--medaka_min_read_q` (10) are left unpolished (on Q8 reads the model made more genes truncated, not fewer). The model used is the last line of the log. The contigs go into the same downstream steps as short-read assemblies.
 
 ### quast/
 
@@ -139,6 +139,23 @@ The pipeline is built using [Nextflow](https://www.nextflow.io/) and processes d
 </details>
 
 The QC gate integrates metrics from QUAST and CheckM2 to produce a pass/fail decision for each sample. Only samples in `passed_samples.txt` proceed to typing, AMR detection, phylogenetics, and clustering. Skipping the gate is possible with `--skip_qc_gate true`, in which case all samples proceed regardless of quality.
+
+### qc/
+
+<details markdown="1">
+<summary>Output files</summary>
+
+- `qc/mixed_strains/<sample>.mixed.tsv`: short-read samples: `sites_assessed` (assembly positions with ≥20 reads), `mixed_sites` (positions where ≥10% and ≥5 reads carry a second base) and `minor_fraction` (median share of that second base: the minor strain's share).
+- `qc/truncated_genes/<sample>.truncated.tsv`: long-only samples: proteins with a same-gene NCTC 8325 hit (≥95% identity) and how many are shorter than 90% of it.
+
+</details>
+
+Two checks that flag samples (`qc_flags` in `summary/combined_summary.tsv`, `flags` in `report/sample_status.tsv`) without dropping them:
+
+- **Mixed _S. aureus_ culture** (`mixed_strains:<sites>_sites,minor_<n>%`, above `--max_mixed_sites`): the trimmed reads are mapped back to the sample's own assembly. One strain agrees with itself almost everywhere (on the 655 short-read samples of the 684-sample run: median 157 sites, 95% below 400, from repeats and sequencing errors); two strains disagree at every position where they differ. That run had no sample between 600 and 920 sites and 25 above, with a minor strain of 11–35%; `--max_mixed_sites` 800 sits in that gap. Mash species QC only catches other species; this catches a second _S. aureus_.
+- **Truncated genes** (`truncated_genes:<n>`, above `--max_truncated_genes`): frameshifts from ONT indel errors that polishing did not fix. Illumina assemblies have about 46 (real pseudogenes and contig ends); 44 of 45 long-only assemblies in the 684-sample run had 33–75.
+
+A third flag, `cgmlst_missing:<n>`, comes from the cgMLST step (above `--max_cgmlst_missing` loci without an allele call): usually a fragmented, contaminated or mixed assembly.
 
 ---
 
@@ -460,6 +477,7 @@ The `--tree` flag is strongly recommended: it uses the treefile as the authorita
   - `mash_refseq/refseq.genomes.msh`: Mash RefSeq sketch for species QC (reuse with `--mash_db`).
   - `mob_suite/mob_db/`: MOB-suite databases.
   - `resfinder/resfinder_db/`: ResFinder FASTA files at commit `--resfinder_db_commit`.
+  - `cgmlst_schema/prepared_schema/`: PubMLST _S. aureus_ cgMLST scheme prepared for chewBBACA (reuse with `--cgmlst_schema`).
 
 </details>
 
@@ -511,6 +529,21 @@ A single wide-format table with one row per sample and columns for every typing 
 
 Gene names are matched across tools by family (allele numbers and accessions removed; e.g. `aac(6')-aph(2'')` = `aac(6')-Ie/aph(2'')-Ia`, `blaPC1` = `blaZ`). Per-gene support is in each sample's `aggregated/<sample>_report.json` (`amr_consensus.support`).
 
+### cgmlst/
+
+<details markdown="1">
+<summary>Output files</summary>
+
+- `cgmlst/`
+  - `results_alleles.tsv`: chewBBACA allele call per sample and locus (PubMLST scheme 20, 1,716 loci; `INF-<n>` = new allele, text = no call).
+  - `results_statistics.tsv`: chewBBACA classification counts per sample.
+  - `cgmlst_distances.tsv`: pairwise allele differences (loci called in both samples).
+  - `cgmlst_stats.tsv`: loci called and missing per sample.
+
+</details>
+
+All samples are called in one chewBBACA run, so new alleles get the same number in every sample that has them. On the 684-sample run allele calling took 7 minutes on 32 CPUs and a typical sample missed 34 loci.
+
 ### clusters/
 
 <details markdown="1">
@@ -518,20 +551,20 @@ Gene names are matched across tools by family (allele numbers and accessions rem
 
 - `clusters/`
   - `clusters.tsv`: Cluster assignment for each sample at three tiers (direct transmission, outbreak, related).
-  - `cluster_report.json`: Structured JSON report with cluster membership, sizes, and metadata annotations.
-  - `transmission_pairs.tsv`: Pairs of samples within the direct transmission threshold with their SNP distances.
+  - `cluster_report.json`: Structured JSON report with cluster membership, sizes, diameters (`max_cgmlst_distance`, `max_snp_distance`), `chain_linked`, and metadata annotations.
+  - `transmission_pairs.tsv`: Pairs of samples within the first SNP tier with their SNP distances.
 
 </details>
 
-The clustering module (`bin/staphit-cluster`) applies single-linkage clustering to the SNP distance matrix at three configurable thresholds (default: 5, 15, and 40 SNPs for _S. aureus_):
+`bin/staphit-cluster` applies single-linkage clustering at three tiers. By default (`--cluster_by cgmlst`) it clusters on cgMLST allele differences, which do not depend on which other lineages are in the run; `--cluster_by snp` uses the SNP distances (Panaroo core genes) and `both` links samples that either distance links. Without cgMLST (`--skip_cgmlst`) it falls back to SNPs.
 
-| Tier   | Default SNP threshold | Interpretation             |
-| ------ | --------------------- | -------------------------- |
-| Tier 1 | <=5 SNPs              | Direct/recent transmission |
-| Tier 2 | <=15 SNPs             | Part of the same outbreak  |
-| Tier 3 | <=40 SNPs             | Epidemiologically related  |
+| Tier                  | cgMLST (default) | SNP (`--cluster_by snp`) | Interpretation             |
+| --------------------- | ---------------- | ------------------------ | -------------------------- |
+| `direct_transmission` | ≤10 alleles      | ≤15 SNPs                 | Direct/recent transmission |
+| `outbreak`            | ≤24 alleles      | ≤50 SNPs                 | Part of the same outbreak  |
+| `related`             | ≤50 alleles      | ≤200 SNPs                | Epidemiologically related  |
 
-When metadata is provided, cluster reports are annotated with epidemiological context (collection dates, locations, infection origin).
+Where the thresholds come from, and how to recalibrate them on your own outbreaks, is in [usage: outbreak clustering thresholds](usage.md#outbreak-clustering-thresholds). A cluster is `chain_linked` when its diameter is more than twice the tier threshold (single linkage joined distant samples through intermediates). When metadata is provided, cluster reports are annotated with epidemiological context (collection dates, locations, infection origin).
 
 ### report/
 

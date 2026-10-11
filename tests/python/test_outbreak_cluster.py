@@ -356,3 +356,36 @@ class TestCLI:
             rows = list(reader)
         sample_ids = {r['sample_id'] for r in rows}
         assert sample_ids == {'A', 'B', 'C'}
+
+
+class TestClusterMethod:
+    """--method picks the distances clustered on (cgMLST by default)."""
+
+    def _run(self, tmp_path, *extra):
+        samples = ['S1', 'S2', 'S3']
+        # SNPs link S1-S2; cgMLST links S2-S3
+        snp = _write_dist_matrix(tmp_path, samples, {('S1', 'S2'): 2, ('S1', 'S3'): 900, ('S2', 'S3'): 900}, 'snp.tsv')
+        cg = _write_dist_matrix(tmp_path, samples, {('S1', 'S2'): 300, ('S1', 'S3'): 300, ('S2', 'S3'): 3}, 'cg.tsv')
+        outdir = os.path.join(str(tmp_path), 'out')
+        result = subprocess.run([sys.executable, TOOL_PATH, '--snp-dists', snp, '--cgmlst-dists', cg,
+                                 '-o', outdir, *extra], capture_output=True, text=True)
+        assert result.returncode == 0, result.stderr
+        with open(os.path.join(outdir, 'clusters.tsv')) as fh:
+            rows = {r['sample_id']: r['direct_transmission_cluster'] for r in csv.DictReader(fh, delimiter='\t')}
+        with open(os.path.join(outdir, 'cluster_report.json')) as fh:
+            report = json.load(fh)
+        return rows, report
+
+    def test_cgmlst_default(self, tmp_path):
+        rows, report = self._run(tmp_path)
+        assert rows['S2'] == rows['S3'] != rows['S1']
+        dt = [c for c in report if c['tier'] == 'direct_transmission'][0]
+        assert dt['max_cgmlst_distance'] == 3 and dt['max_snp_distance'] == 900
+
+    def test_snp(self, tmp_path):
+        rows, _ = self._run(tmp_path, '--method', 'snp')
+        assert rows['S1'] == rows['S2'] != rows['S3']
+
+    def test_both(self, tmp_path):
+        rows, _ = self._run(tmp_path, '--method', 'both')
+        assert rows['S1'] == rows['S2'] == rows['S3']

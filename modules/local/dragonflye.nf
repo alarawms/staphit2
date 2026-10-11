@@ -7,7 +7,7 @@ process DRAGONFLYE {
         'quay.io/biocontainers/dragonflye:1.2.1--hdfd78af_0' }"
 
     input:
-    tuple val(meta), path(long_reads), path(short_reads)   // short_reads = [] for long-only
+    tuple val(meta), path(long_reads), path(short_reads), val(medaka)   // short_reads = [] for long-only; medaka: model, 'auto' or ''
 
     output:
     tuple val(meta), path("${meta.id}.scaffolds.fasta"), emit: scaffolds
@@ -17,20 +17,34 @@ process DRAGONFLYE {
     tuple val("${task.process}"), val('flye'), eval("flye --version"), topic: versions, emit: versions_flye
 
     script:
-    // Long-only: Flye + Racon (+ Medaka if --medaka_model). Hybrid: additionally Polypolish with the short reads.
+    // Long-only: Flye + Racon + Medaka. Hybrid: Flye + Racon + Polypolish with the short reads.
+    // medaka 'auto' (B6): the basecaller model named in the read headers (downloaded to ~/.medaka
+    // if not bundled); headers without one (e.g. ENA) get Medaka's bundled R10.4.1 SUP model.
     def polish = meta.mode == 'hybrid' ? "--R1 ${short_reads[0]} --R2 ${short_reads[1]} --polypolish 1" : ''
-    def medaka = params.medaka_model ? "--model ${params.medaka_model}" : ''
     def nanohq = params.flye_nanohq ? '--nanohq' : ''
     """
+    export HOME=\$PWD
+    MODEL="${medaka}"
+    if [ "\$MODEL" = auto ]; then
+        HEADER=\$(gzip -cdf ${long_reads} 2>/dev/null | head -n 1 || true)
+        if PATH_=\$(medaka tools resolve_model --auto_model consensus ${long_reads} 2>/dev/null); then
+            MODEL=\$(basename "\$PATH_" _model.tar.gz)
+        elif [[ "\$HEADER" == *basecall_model_version_id* ]]; then
+            MODEL=""   # the headers name a model that could not be downloaded: better unpolished than the wrong model
+        else
+            MODEL=r1041_e82_400bps_sup_v4.3.0
+        fi
+    fi
     dragonflye \\
         --reads ${long_reads} \\
         --gsize ${params.genome_size} \\
         --cpus ${task.cpus} \\
         --ram ${task.memory.toGiga()} \\
-        ${nanohq} ${medaka} ${polish} \\
+        ${nanohq} \${MODEL:+--model \$MODEL} ${polish} \\
         --outdir out
     mv out/contigs.fa ${meta.id}.scaffolds.fasta
     mv out/dragonflye.log ${meta.id}.dragonflye.log
+    echo "staphit2 medaka model: \${MODEL:-none} (requested: ${medaka ?: 'none'})" >> ${meta.id}.dragonflye.log
     mv out/flye*.gfa ${meta.id}.gfa   # flye-unpolished.gfa when polished, flye.gfa otherwise
     """
 

@@ -31,7 +31,8 @@ typing:
       container: alarawms/staph_agr_typer
       output_key: agr_group
 
-# Outbreak thresholds (calibrated to S. aureus mutation rate ~2 SNPs/genome/year)
+# Outbreak thresholds (descriptive; the pipeline uses --cluster_cgmlst_tiers / --cluster_snp_tiers,
+# see docs/usage.md#outbreak-clustering-thresholds). snp_tiers here are for Snippy whole-genome SNPs.
 outbreak:
   snp_tiers:
     direct_transmission: 5

@@ -16,10 +16,12 @@ then the run-level outputs:
     summary      row in combined_summary.tsv              (else: typing_incomplete)
     tree         tip in the phylogeny                     (else: not_in_tree; still in the summary)
 
-Value lines `size|depth_short|depth_long<TAB>sample_id<TAB>value` give the assembly length (bp)
-and read depth (x). Samples that are kept are flagged (not dropped) for low depth, too many
-contigs or a low N50; the flags go to the `flags` column and, with --summary-out, to a
-`qc_flags` column added to the summary. Detail files named NO_* are placeholders for skipped
+Value lines `<name><TAB>sample_id<TAB>value` give the assembly length (size, bp), read depth
+(depth_short, depth_long; x), cgMLST loci without a call (cgmlst_missing), mixed-strain sites
+(mixed_sites, plus the minor-strain fraction as a 4th field) and truncated genes in long-read
+assemblies (truncated). Samples that are kept are flagged (not dropped) for low depth, too many
+contigs, a low N50, a mixed culture, many missing cgMLST loci or many truncated genes; the
+flags go to the `flags` column and, with --summary-out, to a `qc_flags` column added to the summary. Detail files named NO_* are placeholders for skipped
 steps and are ignored.
 
 Output TSV: sample_id, status (included | not_in_tree | dropped), stage, reason, flags
@@ -36,7 +38,7 @@ STAGES = [
     ('qc_pass', 'qc_gate_failed'),
     ('species_pass', 'not_s_aureus'),
 ]
-VALUE_STAGES = ('size', 'depth_short', 'depth_long')
+VALUE_STAGES = ('size', 'depth_short', 'depth_long', 'cgmlst_missing', 'mixed_sites', 'truncated')
 
 
 def _given(path):
@@ -59,7 +61,7 @@ def _int(value):
 
 def read_stages(path):
     """-> ({stage: set(ids)}, {value_stage: {id: float}}, [input ids in order])"""
-    seen, values, order = {}, {k: {} for k in VALUE_STAGES}, []
+    seen, values, order = {}, {k: {} for k in VALUE_STAGES + ('mixed_fraction',)}, []
     with open(path) as fh:
         for line in fh:
             parts = line.rstrip('\n').split('\t')
@@ -68,6 +70,8 @@ def read_stages(path):
             stage, sid = parts[0], parts[1]
             if stage in VALUE_STAGES:
                 values[stage][sid] = float(parts[2])
+                if stage == 'mixed_sites' and len(parts) > 3:
+                    values['mixed_fraction'][sid] = float(parts[3])
                 continue
             seen.setdefault(stage, set()).add(sid)
             if stage == 'input' and sid not in order:
@@ -107,7 +111,7 @@ def classify(sid, seen, values, qc, species, summary, tips, a):
 
 
 def flags_for(sid, values, summary_row, a):
-    """Weak-but-kept signals: low read depth, fragmented assembly."""
+    """Weak-but-kept signals: low read depth, fragmented assembly, mixed culture, gene damage."""
     flags = []
     short, long_ = values['depth_short'].get(sid), values['depth_long'].get(sid)
     if short is not None and short < a.min_depth_short:
@@ -119,6 +123,15 @@ def flags_for(sid, values, summary_row, a):
         flags.append(f'contigs:{contigs}')
     if n50 is not None and n50 < a.min_n50:
         flags.append(f'n50:{n50 / 1000:.1f}kb')
+    mixed = values['mixed_sites'].get(sid)
+    if mixed is not None and mixed > a.max_mixed_sites:
+        flags.append(f"mixed_strains:{mixed:.0f}_sites,minor_{values['mixed_fraction'].get(sid, 0) * 100:.0f}%")
+    missing = values['cgmlst_missing'].get(sid)
+    if missing is not None and missing > a.max_cgmlst_missing:
+        flags.append(f'cgmlst_missing:{missing:.0f}')
+    truncated = values['truncated'].get(sid)
+    if truncated is not None and truncated > a.max_truncated:
+        flags.append(f'truncated_genes:{truncated:.0f}')
     return ';'.join(flags)
 
 
@@ -135,6 +148,9 @@ def main(argv=None):
     ap.add_argument('--min-depth-long', type=float, default=20)
     ap.add_argument('--max-contigs', type=int, default=500)
     ap.add_argument('--min-n50', type=int, default=10000)
+    ap.add_argument('--max-mixed-sites', type=int, default=800)
+    ap.add_argument('--max-cgmlst-missing', type=int, default=86)
+    ap.add_argument('--max-truncated', type=int, default=80)
     ap.add_argument('--summary-out', help='Write the summary with a qc_flags column here')
     ap.add_argument('-o', '--output', required=True)
     a = ap.parse_args(argv)

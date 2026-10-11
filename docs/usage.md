@@ -216,38 +216,45 @@ work/               # Nextflow working files
 
 ### Quality control
 
-| Parameter                 | Default   | Description                                                                |
-| ------------------------- | --------- | -------------------------------------------------------------------------- |
-| `--min_completeness`      | `90`      | Minimum CheckM2 completeness (%) to pass QC gate                           |
-| `--max_contamination`     | `5`       | Maximum CheckM2 contamination (%) to pass QC gate                          |
-| `--skip_qc_gate`          | `false`   | Skip CheckM2 (and its ~3 GB database) and the QC gate; all samples proceed |
-| `--min_assembly_size`     | `2500000` | Drop assemblies shorter than this (bp)                                     |
-| `--max_assembly_size`     | `3200000` | Drop assemblies longer than this (bp)                                      |
-| `--min_depth_short`       | `30`      | Flag (not drop) samples with trimmed Illumina depth below this             |
-| `--min_depth_long`        | `20`      | Flag samples with ONT depth below this                                     |
-| `--max_contigs`           | `500`     | Flag assemblies with more contigs than this                                |
-| `--min_n50`               | `10000`   | Flag assemblies with N50 below this (bp)                                   |
-| `--species_ani_threshold` | `95.0`    | Minimum ANI (%) to NCTC 8325 for _S. aureus_ species confirmation          |
-| `--skip_species_qc`       | `false`   | Skip fastANI species confirmation step                                     |
-| `--assembler`             | `skesa`   | Short-read assembler: `skesa` (default) or `spades`                        |
+| Parameter                 | Default   | Description                                                                                         |
+| ------------------------- | --------- | --------------------------------------------------------------------------------------------------- |
+| `--min_completeness`      | `90`      | Minimum CheckM2 completeness (%) to pass QC gate                                                    |
+| `--max_contamination`     | `5`       | Maximum CheckM2 contamination (%) to pass QC gate                                                   |
+| `--skip_qc_gate`          | `false`   | Skip CheckM2 (and its ~3 GB database) and the QC gate; all samples proceed                          |
+| `--min_assembly_size`     | `2500000` | Drop assemblies shorter than this (bp)                                                              |
+| `--max_assembly_size`     | `3200000` | Drop assemblies longer than this (bp)                                                               |
+| `--min_depth_short`       | `30`      | Flag (not drop) samples with trimmed Illumina depth below this                                      |
+| `--min_depth_long`        | `20`      | Flag samples with ONT depth below this                                                              |
+| `--max_contigs`           | `500`     | Flag assemblies with more contigs than this                                                         |
+| `--min_n50`               | `10000`   | Flag assemblies with N50 below this (bp)                                                            |
+| `--max_mixed_sites`       | `800`     | Flag a mixed _S. aureus_ culture: sites where ≥10% of reads disagree with the sample's own assembly |
+| `--max_cgmlst_missing`    | `86`      | Flag samples with more cgMLST loci than this without a call (5% of 1,716)                           |
+| `--max_truncated_genes`   | `80`      | Flag long-only assemblies with more truncated genes than this (ONT frameshifts)                     |
+| `--species_ani_threshold` | `95.0`    | Minimum ANI (%) to NCTC 8325 for _S. aureus_ species confirmation                                   |
+| `--skip_species_qc`       | `false`   | Skip fastANI species confirmation step                                                              |
+| `--assembler`             | `skesa`   | Short-read assembler: `skesa` (default) or `spades`                                                 |
 
 ### Long reads
 
-| Parameter        | Default | Description                                                                                    |
-| ---------------- | ------- | ---------------------------------------------------------------------------------------------- |
-| `--flye_nanohq`  | `false` | Run Flye with `--nano-hq` (R10.4.1 / Q20+ reads)                                               |
-| `--medaka_model` | `null`  | Medaka model for long-only polishing (e.g. `r1041_e82_400bps_sup_v5.0.0`); omitted = no Medaka |
+| Parameter             | Default | Description                                                                                                                                                                                                                 |
+| --------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--flye_nanohq`       | `false` | Run Flye with `--nano-hq` (R10.4.1 / Q20+ reads)                                                                                                                                                                            |
+| `--medaka_model`      | `auto`  | `auto`: polish long-only assemblies with the model named in the read headers, else Medaka's R10.4.1 SUP model (`r1041_e82_400bps_sup_v4.3.0`); `none`: no Medaka; a model name: that model for long-only and hybrid samples |
+| `--medaka_min_read_q` | `10`    | With `auto`, leave samples unpolished when the NanoPlot median read quality is below this                                                                                                                                   |
+
+Public ONT reads usually have no basecaller model in their headers (ENA rewrites them), so `auto` assumes current R10.4.1 chemistry. For R9.4.1 data pass the model, e.g. `--medaka_model r941_min_sup_g507`. On the 45 long-only samples of the 684-sample run, Flye + Racon assemblies from Q10+ reads were already about as intact as Illumina assemblies (33–75 truncated genes against a median of 46); Medaka removed a further ~20 on samples with more and changed nothing on the rest, but made a Q8 sample worse (108 → 136), hence `--medaka_min_read_q`.
 
 ### Databases
 
 Databases are downloaded on the first run and published to `<outdir>/databases/`. Pass them back on later runs to skip the download; their versions (or checksums) are recorded in `pipeline_info/staphit2_software_mqc_versions.yml`.
 
-| Parameter               | Default    | Description                                              |
-| ----------------------- | ---------- | -------------------------------------------------------- |
-| `--checkm2_db`          | `null`     | Local CheckM2 DIAMOND database (`uniref100.KO.1.dmnd`)   |
-| `--amrfinder_db`        | `null`     | Local AMRFinderPlus database (`amrfinderdb.tar.gz`)      |
-| `--mash_db`             | `null`     | Local Mash RefSeq sketch (`refseq.genomes.k21s1000.msh`) |
-| `--resfinder_db_commit` | `eecf0aa…` | ResFinder database git commit used by KMA                |
+| Parameter               | Default    | Description                                                                                                                         |
+| ----------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `--checkm2_db`          | `null`     | Local CheckM2 DIAMOND database (`uniref100.KO.1.dmnd`)                                                                              |
+| `--amrfinder_db`        | `null`     | Local AMRFinderPlus database (`amrfinderdb.tar.gz`)                                                                                 |
+| `--mash_db`             | `null`     | Local Mash RefSeq sketch (`refseq.genomes.k21s1000.msh`)                                                                            |
+| `--resfinder_db_commit` | `eecf0aa…` | ResFinder database git commit used by KMA                                                                                           |
+| `--cgmlst_schema`       | `null`     | Prepared chewBBACA cgMLST schema (`databases/cgmlst_schema/prepared_schema`); default: download PubMLST scheme 20 (~840 MB, ~6 min) |
 
 ### Typing
 
@@ -276,10 +283,30 @@ Databases are downloaded on the first run and published to `<outdir>/databases/`
 
 ### Clustering
 
-| Parameter                | Default     | Description                                                                                                                                                        |
-| ------------------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `--cluster_snp_tiers`    | `15,50,200` | Core gene SNP thresholds for direct transmission, outbreak, and related tiers (calibrated for Panaroo alignment; use `5,15,40` for WGS reference-mapped distances) |
-| `--cluster_cgmlst_tiers` | `10,24,50`  | Comma-separated cgMLST allelic distance thresholds for the same three tiers                                                                                        |
+| Parameter                | Default     | Description                                                                                                                                                       |
+| ------------------------ | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--cluster_by`           | `cgmlst`    | Distances to cluster on: `cgmlst`, `snp`, or `both` (linked by either)                                                                                            |
+| `--cluster_cgmlst_tiers` | `10,24,50`  | Allele differences (PubMLST scheme 20) for the direct transmission, outbreak and related tiers                                                                    |
+| `--cluster_snp_tiers`    | `15,50,200` | SNP thresholds for the same tiers with `--cluster_by snp\|both`, and for transmission pairs (Panaroo core genes; use `5,15,40` for Snippy whole-genome distances) |
+| `--skip_cgmlst`          | `false`     | Skip cgMLST (schema download and allele calling); clustering falls back to SNPs                                                                                   |
+
+#### Outbreak clustering thresholds
+
+Each threshold only means something on the distance it was set for:
+
+| Threshold         | Distance                                                                                                      | Source                                                                                                                                                                                                                                                                                                |
+| ----------------- | ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| cgMLST `10,24,50` | Allele differences over the 1,716 loci of PubMLST _S. aureus_ scheme 20, counting loci called in both samples | 24 is the SeqSphere+ cluster threshold for the _S. aureus_ cgMLST of Leopold et al. 2014 (1,861 loci); PubMLST's own LIN-code bins for scheme 20 fall at 27, 14, 7, 4, 2 and 1 alleles. 10 and 50 are tighter and looser tiers around it                                                              |
+| SNP `15,50,200`   | SNPs in the Panaroo core-gene alignment (BMGE-filtered, ~2 Mb)                                                | 15 follows the 15-SNP cut-off Coll et al. 2020 proposed for excluding recent MRSA transmission, which was set on whole-genome SNPs; a core-gene alignment covers less of the genome (and shrinks as lineages are added), so here it is conservative. 50 and 200 are wide tiers, not calibrated values |
+| SNP `5,15,40`     | Snippy whole-genome SNPs against NCTC 8325 (`--phylo_method snippy`)                                          | Set from the _S. aureus_ substitution rate (a few SNPs per genome per year); not calibrated on outbreaks                                                                                                                                                                                              |
+
+On the 684-sample run, sample pairs within 15 whole-genome SNPs (Snippy, pairwise) differed by at most 9 cgMLST alleles (95th percentile 8), and one allele difference corresponded to a median of 2.8 SNPs, so the 10-allele tier sits where 15–25 SNPs would. That comparison is not a calibration: only known outbreaks can set the thresholds for a setting. With a TSV of `sample_id<TAB>outbreak` for samples whose status is known (`sporadic` for unlinked ones), run
+
+```bash
+bin/staphit-calibrate-thresholds results/cgmlst/cgmlst_distances.tsv outbreaks.tsv --max 60
+```
+
+It prints the sensitivity and specificity of every threshold for separating linked from unlinked pairs and the one with the highest Youden's J; pass the chosen values with `--cluster_cgmlst_tiers` (or run it on `snpdists/` for `--cluster_snp_tiers`).
 
 ### MultiQC
 

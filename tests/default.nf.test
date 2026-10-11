@@ -37,6 +37,13 @@ nextflow_pipeline {
                 // every sample reaches the run-level summary
                 { assert path("$outputDir/summary/combined_summary.tsv").exists() },
                 { assert path("$outputDir/aggregated").list().size() == 6 },
+                // mixed-strain check needs short reads; truncated-gene check is for long-only assemblies
+                { assert path("$outputDir/qc/mixed_strains/SHORT1.mixed.tsv").exists() },
+                { assert path("$outputDir/qc/mixed_strains/HYBRID1.mixed.tsv").exists() },
+                { assert !path("$outputDir/qc/mixed_strains/LONG1.mixed.tsv").exists() },
+                { assert path("$outputDir/qc/truncated_genes").list()*.fileName*.toString() == ['LONG1.truncated.tsv'] },
+                // cgMLST clustering is on by default
+                { assert path("$outputDir/cgmlst/cgmlst_distances.tsv").exists() },
                 // local modules report versions
                 { assert ['DRAGONFLYE:', 'FASTP:', 'NANOPLOT:', 'SCCMEC:', 'FETCH_RESFINDER_DB:'].every { versions.contains(it) } },
             )

@@ -1,0 +1,76 @@
+#!/usr/bin/env python3
+"""staphit-truncated: count truncated genes (ONT indel errors) against reference proteins.
+
+    staphit-truncated ref NCTC8325.gbk > ref.faa
+    blastp -query sample.faa -db ref -outfmt '6 qseqid sseqid pident qlen slen' -max_target_seqs 1 > hits.tsv
+    staphit-truncated count SAMPLE hits.tsv > truncated.tsv
+
+Homopolymer indels left in a long-read assembly shift the reading frame, so predicted
+proteins stop early (Ideel-style check). A protein counts as truncated when its best hit
+is the same S. aureus gene (identity >= --min-identity) and it is shorter than
+--max-ratio of that reference protein. A well-polished assembly has a few tens (real
+pseudogenes, contig ends); unpolished ONT assemblies have hundreds.
+
+Output TSV: sample_id, proteins_with_hit, truncated, truncated_pct
+"""
+import argparse
+import re
+import sys
+
+
+def reference_proteins(gbk, out):
+    """Write every /translation in a GenBank file as FASTA (locus_tag as name)."""
+    text = open(gbk).read()
+    n = 0
+    for feature in re.split(r'\n {5}(?=\S)', text):
+        if not feature.startswith('CDS'):
+            continue
+        tr = re.search(r'/translation="([^"]+)"', feature)
+        if not tr:
+            continue
+        tag = re.search(r'/locus_tag="([^"]+)"', feature)
+        n += 1
+        out.write('>{}\n{}\n'.format(tag.group(1) if tag else 'cds{}'.format(n), re.sub(r'\s', '', tr.group(1))))
+    return n
+
+
+def count_truncated(lines, min_identity=95.0, max_ratio=0.9):
+    """-> (proteins with a same-species hit, truncated proteins); first line per query = best hit."""
+    seen, hits, truncated = set(), 0, 0
+    for line in lines:
+        parts = line.split('\t')
+        if len(parts) < 5 or parts[0] in seen:
+            continue
+        seen.add(parts[0])
+        if float(parts[2]) < min_identity:
+            continue
+        hits += 1
+        if int(parts[3]) < max_ratio * int(parts[4]):
+            truncated += 1
+    return hits, truncated
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    sub = ap.add_subparsers(dest='cmd', required=True)
+    r = sub.add_parser('ref')
+    r.add_argument('gbk')
+    c = sub.add_parser('count')
+    c.add_argument('sample_id')
+    c.add_argument('hits')
+    c.add_argument('--min-identity', type=float, default=95.0)
+    c.add_argument('--max-ratio', type=float, default=0.9)
+    a = ap.parse_args(argv)
+
+    if a.cmd == 'ref':
+        n = reference_proteins(a.gbk, sys.stdout)
+        print('{} reference proteins'.format(n), file=sys.stderr)
+        return
+    with open(a.hits) as fh:
+        hits, truncated = count_truncated(fh, a.min_identity, a.max_ratio)
+    print('sample_id\tproteins_with_hit\ttruncated\ttruncated_pct')
+    print('{}\t{}\t{}\t{:.1f}'.format(a.sample_id, hits, truncated, 100.0 * truncated / hits if hits else 0.0))
+
+
+if __name__ == '__main__':
+    main()

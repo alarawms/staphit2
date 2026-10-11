@@ -39,6 +39,8 @@ include { ITOL_EXPORT      } from '../modules/local/itol_export'
 // MultiQC
 include { MULTIQC          } from '../modules/nf-core/multiqc/main'
 include { SAMPLE_STATUS    } from '../modules/local/sample_status'
+include { MIXED_STRAINS    } from '../modules/local/mixed_strains'
+include { TRUNCATED_GENES  } from '../modules/local/truncated_genes'
 
 workflow STAPHIT2 {
 
@@ -86,6 +88,19 @@ workflow STAPHIT2 {
     // ── Phase 5: Phylogeny ──────────────────────────────────────────────────
     PHYLOGENY ( ch_assemblies, ch_snippy_reads )
     ch_versions = ch_versions.mix(PHYLOGENY.out.versions)
+
+    // ── Assembly checks that flag (not drop) samples ────────────────────────
+    // Mixed S. aureus strains: short reads mapped back to their own assembly (B2)
+    MIXED_STRAINS (
+        ch_trimmed.map { meta, reads -> [ meta.id, reads ] }
+            .join(ch_assemblies.map { meta, fasta -> [ meta.id, meta, fasta ] })
+            .map { _id, reads, meta, fasta -> [ meta, reads, fasta ] }
+    )
+    // Truncated genes in long-only assemblies (ONT indel errors left after polishing; B6)
+    TRUNCATED_GENES (
+        PHYLOGENY.out.prokka_faa.filter(is_long),
+        channel.value(file(params.reference, checkIfExists: true))
+    )
 
     // ── Phase 6: Per-sample Aggregation ─────────────────────────────────────
     // Normalize all channels to [sample_id, path] before joining
@@ -143,13 +158,10 @@ workflow STAPHIT2 {
     )
 
     // ── Phase 7: Outbreak Clustering ────────────────────────────────────────
-    ch_cgmlst_dists = channel.of(file("${projectDir}/assets/NO_CGMLST_DISTS"))
-
-    // Use Snippy whole-genome distances for clustering (more discriminatory)
-    // Falls back to Panaroo core gene distances if Snippy not run
+    // cgMLST allele distances (default) or SNP distances (--cluster_by snp|both)
     CLUSTERING (
         PHYLOGENY.out.cluster_dists.map { _meta, tsv -> tsv },
-        ch_cgmlst_dists,
+        ch_assemblies,
         SUMMARY_MERGER.out.summary
     )
 
@@ -171,7 +183,14 @@ workflow STAPHIT2 {
             },
             QC_ASSEMBLY.out.assemblies.map { meta, _x -> "size_pass\t${meta.id}" },
             QC_ASSEMBLY.out.passed_assemblies.map { meta, _x -> "qc_pass\t${meta.id}" },
-            ch_assemblies.map { meta, _x -> "species_pass\t${meta.id}" }
+            ch_assemblies.map { meta, _x -> "species_pass\t${meta.id}" },
+            // loci without an allele call (cgMLST), one line per sample
+            CLUSTERING.out.cgmlst_stats.splitCsv(header: true, sep: '\t')
+                .map { row -> "cgmlst_missing\t${row.sample_id}\t${row.missing_loci}" },
+            MIXED_STRAINS.out.tsv.splitCsv(header: true, sep: '\t', elem: 1)
+                .map { _meta, row -> "mixed_sites\t${row.sample_id}\t${row.mixed_sites}\t${row.minor_fraction}" },
+            TRUNCATED_GENES.out.tsv.splitCsv(header: true, sep: '\t', elem: 1)
+                .map { _meta, row -> "truncated\t${row.sample_id}\t${row.truncated}" }
         )
         .collectFile(name: 'stages.tsv', newLine: true, sort: true)
 
