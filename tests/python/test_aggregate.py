@@ -476,8 +476,9 @@ class TestCLI:
         # KMA
         kma = tmp_path / 'kma.res'
         kma.write_text(
-            '# Template\tScore\tExpected\tTemplate_length\tTemplate_Identity\n'
-            'tetM\t500\t100\t1000\t99.5\n'
+            '#Template\tScore\tExpected\tTemplate_length\tTemplate_Identity\tTemplate_Coverage\t'
+            'Query_Identity\tQuery_Coverage\tDepth\tq_value\tp_value\n'
+            'tetM\t500\t100\t1000\t99.5\t100.0\t99.5\t100.0\t35.2\t480.0\t1.0e-26\n'
         )
 
         # Metadata
@@ -542,3 +543,48 @@ class TestCLI:
         report = json.loads((outdir / 'BARE_report.json').read_text())
         assert report['sample_id'] == 'BARE'
         assert report['qc'] == {}
+
+
+# ===========================================================================
+# TestAmrConsensus
+# ===========================================================================
+
+class TestAmrConsensus:
+
+    def test_family_names_line_up_across_tools(self):
+        assert agg.amr_family('blaZ_138', 'resfinder') == 'blaZ'
+        assert agg.amr_family('mecA_8_NC_002745', 'kma') == 'mecA'
+        assert agg.amr_family("aac(6')-aph(2'')_1_M13771", 'kma') == "aac(6')-Ie/aph(2'')-Ia"
+        assert agg.amr_family("aph(3')-III_1_M26832", 'resfinder') == "aph(3')-IIIa"
+        assert agg.amr_family('aadD_1_AF181950', 'resfinder') == 'aadD1'
+        assert agg.amr_family('blaPC1', 'amrfinder') == 'blaZ'
+        assert agg.amr_family('erm(C)', 'amrfinder') == 'erm(C)'
+
+    def test_consensus_rules(self):
+        amr = [
+            {'gene': 'mecA', 'element_type': 'AMR', 'element_subtype': 'AMR'},
+            {'gene': 'fosB', 'element_type': 'AMR', 'element_subtype': 'AMR'},       # AMRFinderPlus only: kept
+            {'gene': 'glpT_A100V', 'element_type': 'AMR', 'element_subtype': 'POINT'},  # point mutation: not a gene
+            {'gene': 'qacA', 'element_type': 'STRESS', 'element_subtype': 'BIOCIDE'},   # not AMR
+        ]
+        abr = [{'gene': 'mecA_1'}, {'gene': 'tet(K)_1'}, {'gene': 'erm(C)_13'}]
+        kma = [{'gene': 'mecA_8_NC_002745'}, {'gene': 'tet(K)_4_U38428'}, {'gene': 'blaZ_130_AHKZ01000073'}]
+        cons, disc, support = agg.amr_consensus(amr, abr, kma)
+        assert cons == ['fosB', 'mecA', 'tet(K)']          # tet(K): ResFinder + KMA agree
+        assert disc == ['blaZ[kma]', 'erm(C)[resfinder]']
+        assert support['mecA'] == ['amrfinder', 'kma', 'resfinder']
+
+    def test_raw_ont_kma_cannot_confirm(self):
+        abr = [{'gene': 'tet(K)_1'}]
+        kma = [{'gene': 'tet(K)_4_U38428'}]
+        cons, disc, _ = agg.amr_consensus([], abr, kma, kma_raw_ont=True)
+        assert cons == []
+        assert disc == ['tet(K)[kma-ont,resfinder]']
+
+    def test_trace_kma_hits_do_not_count(self):
+        # KMA saw ~100x; mecA at 10x is trace (carry-over), tet(K) at 95x is real
+        abr = [{'gene': 'tet(K)_1'}]
+        kma = [{'gene': 'mecA_6_BX571856', 'depth': 10.0}, {'gene': 'tet(K)_4_U38428', 'depth': 95.0}]
+        cons, disc, _ = agg.amr_consensus([], abr, kma, kma_ref_depth=100.0)
+        assert cons == ['tet(K)']
+        assert disc == ['mecA[kma-trace]']
