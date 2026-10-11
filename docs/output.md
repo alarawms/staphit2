@@ -449,6 +449,22 @@ The `--tree` flag is strongly recommended: it uses the treefile as the authorita
 
 ---
 
+## Fetched public data (`--cc` / `--st`)
+
+<details markdown="1">
+<summary>Output files</summary>
+
+- `pubmlst/`
+  - `accessions.txt`: run accessions matching the query.
+  - `metadata.tsv`: per-isolate metadata from PubMLST, NCBI and ENA.
+  - `samplesheet.csv`: one row per downloaded run, with paths to the reads in `sra/`; reuse with `--input` to rerun without downloading.
+- `sra/`
+  - `<accession>_{1,2}.fastq.gz`: downloaded paired-end reads.
+
+</details>
+
+---
+
 ## Databases
 
 <details markdown="1">

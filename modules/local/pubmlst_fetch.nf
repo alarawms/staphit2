@@ -33,6 +33,7 @@ process PUBMLST_FETCH {
 
     stub:
     """
-    touch accessions.txt metadata.tsv
+    printf "SRR0000001\\nSRR0000002\\n" > accessions.txt
+    touch metadata.tsv
     """
 }
