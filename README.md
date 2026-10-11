@@ -15,31 +15,33 @@
 Built on a species-agnostic core architecture, the pipeline is designed to support additional bacterial pathogens in the future via species descriptor files.
 
 ```
-Reads → TrimGalore → Rasusa (subsampling) → FastQC
-                │
-                ├→ SKESA / SPAdes → QUAST → CheckM2 → QC Gate
-                │        │
-                │        ├→ MLST + spaTyper + SCCmec + agr
-                │        ├→ AMRFinderPlus (genes + point mutations)
-                │        ├→ ABRicate (resfinder + vfdb + plasmidfinder)
-                │        ├→ MOB-suite (plasmid reconstruction)
-                │        └→ Prokka → Panaroo → IQ-TREE → SNP-dists
-                │
-                └→ KMA (read-based AMR)
-                          │
-                          └→ Aggregator → Summary → Outbreak Clustering
-                                                  → Run Report
-                                                  → Visualization
-                                                  → MultiQC
+Illumina reads → fastp → Rasusa → FastQC ──→ SKESA / SPAdes ─┐
+ONT reads      → NanoPlot ─────────────────→ Flye + Racon ───┼→ Medaka (ONT only) / Polypolish (hybrid)
+                                                             │
+        assembly size gate → QUAST → CheckM2 → QC gate → fastANI + Mash (species, contamination)
+                                                             │
+           ├→ MLST + spaTyper + SCCmec + agr
+           ├→ AMRFinderPlus + ABRicate (assembly) + KMA (reads) → AMR consensus
+           ├→ MOB-suite (plasmids)
+           ├→ reads vs own assembly → mixed-strain check
+           ├→ Prokka → truncated-gene check (ONT only)
+           ├→ Prokka → Panaroo → IQ-TREE → SNP-dists          (tree)
+           ├→ Snippy → [Gubbins → BEAST2]                       (optional dating)
+           └→ chewBBACA cgMLST (PubMLST scheme 20) → allele distances
+                                                             │
+        Aggregator → Summary + QC flags → Outbreak clustering (cgMLST) → Report, figures, iTOL, MultiQC
+                                        → Sample status (why each sample was dropped or flagged)
 ```
+
+How each check is calibrated, and what it found on a 684-sample run, is in [docs/methods.md](docs/methods.md).
 
 ### Analysis steps
 
 | Step                   | Tool                           | Description                                                                 |
 | ---------------------- | ------------------------------ | --------------------------------------------------------------------------- |
-| Read QC                | TrimGalore + FastQC            | Adapter trimming and quality assessment                                     |
+| Read QC                | fastp + FastQC / NanoPlot      | Adapter trimming and quality assessment                                     |
 | Read subsampling       | Rasusa                         | Normalize coverage to target depth (default: 100x)                          |
-| Assembly               | SKESA or SPAdes                | _De novo_ genome assembly                                                   |
+| Assembly               | SKESA or SPAdes; Dragonflye    | _De novo_ assembly: Illumina, ONT (Flye + Medaka) or hybrid (+ Polypolish)  |
 | Assembly QC            | QUAST + CheckM2                | Assembly metrics + completeness/contamination check                         |
 | MLST                   | mlst                           | 7-locus multi-locus sequence typing                                         |
 | spa typing             | spaTyper                       | _spa_ gene repeat typing                                                    |
@@ -57,6 +59,7 @@ Reads → TrimGalore → Rasusa (subsampling) → FastQC
 | cgMLST                 | chewBBACA (PubMLST scheme 20)  | Allele profiles over 1,716 core loci; allele distances                      |
 | Outbreak clustering    | staphit-cluster                | Tiered clustering (≤10/24/50 cgMLST alleles by default) with epi annotation |
 | Mixed-culture check    | minimap2 + bcftools            | Flags a second _S. aureus_ strain in the reads                              |
+| Gene integrity (ONT)   | blastp vs NCTC 8325            | Flags long-read assemblies with many truncated genes                        |
 | Reporting              | staphit-report                 | Automated Markdown run report                                               |
 | Visualization          | staphit-visualize              | Publication-ready figures                                                   |
 | Dashboard              | staphit-dashboard              | Interactive Plotly Dash surveillance dashboard (optional)                   |
@@ -389,13 +392,17 @@ nextflow run alarawms/staphit2 \
 
 ```
 results/
-├── trimgalore/         # Trimmed reads
+├── fastp/              # Read trimming reports
+├── nanoplot/           # ONT read QC
+├── dragonflye/         # Long-read/hybrid assembly logs (Medaka model used) + graphs
 ├── rasusa/             # Subsampled reads
 ├── fastqc/             # Read quality reports
 ├── skesa/              # Assembled genomes
 ├── quast/              # Assembly QC
 ├── checkm2/            # Genome completeness/contamination
 ├── qc_gate/            # QC pass/fail summary
+├── qc/                 # mixed_strains/ (B2) and truncated_genes/ (ONT) per sample
+├── species_qc/         # Species confirmation + second species
 ├── mlst/               # MLST types
 ├── spatyper/           # spa types
 ├── sccmec/             # SCCmec types (+SVG if --sccmec_viz)
@@ -414,9 +421,12 @@ results/
 │   ├── beast_run.log   # BEAST2 MCMC trace (ESS diagnostics in Tracer)
 │   └── beast_run.trees # Posterior tree distribution (input for TreeAnnotator)
 ├── snpdists/           # SNP distance matrix
+├── cgmlst/             # chewBBACA allele calls + allele distances
+├── databases/          # Downloaded databases (reuse with --*_db / --cgmlst_schema)
 ├── aggregated/         # Per-sample JSON reports + summary
 ├── clusters/           # Outbreak clusters + transmission pairs
-├── report/             # Markdown run report
+├── summary/            # combined_summary.tsv (one row per sample, with qc_flags)
+├── report/             # Run report + sample_status.tsv (dropped/flagged and why)
 ├── figures/            # Publication figures
 ├── multiqc/            # MultiQC report
 └── pipeline_info/      # Execution reports

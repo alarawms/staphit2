@@ -6,14 +6,16 @@ This document describes the output produced by the pipeline. All directories lis
 
 The pipeline is built using [Nextflow](https://www.nextflow.io/) and processes data through the following stages:
 
-1. [Read QC and preprocessing](#read-qc-and-preprocessing) -- TrimGalore, Rasusa, FastQC
-2. [Assembly and quality assessment](#assembly-and-quality-assessment) -- SKESA/SPAdes, QUAST, CheckM2, QC gate
+1. [Read QC and preprocessing](#read-qc-and-preprocessing) -- fastp, NanoPlot, Rasusa, FastQC
+2. [Assembly and quality assessment](#assembly-and-quality-assessment) -- SKESA/SPAdes, Dragonflye (Flye + Medaka/Polypolish), QUAST, CheckM2, QC gate, mixed-strain and truncated-gene checks (`qc/`)
 3. [Typing](#typing) -- MLST, spaTyper, SCCmec, agr, Mash
 4. [Antimicrobial resistance](#antimicrobial-resistance) -- AMRFinderPlus, ABRicate, KMA
 5. [Plasmid analysis](#plasmid-analysis) -- MOB-suite, plasmid summary
-6. [Genome annotation and phylogenetics](#genome-annotation-and-phylogenetics) -- Prokka, Panaroo/Snippy, IQ-TREE/FastTree, SNP-dists
-7. [Aggregation and reporting](#aggregation-and-reporting) -- per-sample reports, combined summary, clusters, run report, figures
+6. [Genome annotation and phylogenetics](#genome-annotation-and-phylogenetics) -- Prokka, Panaroo/Snippy, IQ-TREE/FastTree, SNP-dists, Gubbins/BEAST2
+7. [Aggregation and reporting](#aggregation-and-reporting) -- per-sample reports, combined summary with QC flags, cgMLST, clusters, sample status, run report, figures
 8. [Quality reports](#quality-reports) -- MultiQC, pipeline information
+
+Why samples are dropped or flagged, and how each check was calibrated, is explained in [Methods and validation](methods.md).
 
 ---
 
@@ -627,7 +629,7 @@ All figures are rendered at publication resolution (300 DPI).
 
 </details>
 
-[MultiQC](http://multiqc.info) aggregates quality metrics from FastQC, TrimGalore, QUAST, and other supported tools into a single interactive HTML report. This provides a rapid overview of sequencing quality and assembly statistics across all samples. For more information about interpreting MultiQC reports, see the [MultiQC documentation](http://multiqc.info).
+[MultiQC](http://multiqc.info) aggregates quality metrics from FastQC, fastp, NanoPlot, QUAST, and other supported tools into a single interactive HTML report. This provides a rapid overview of sequencing quality and assembly statistics across all samples. For more information about interpreting MultiQC reports, see the [MultiQC documentation](http://multiqc.info).
 
 ### pipeline_info/
 
