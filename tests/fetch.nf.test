@@ -1,0 +1,33 @@
+nextflow_pipeline {
+
+    name "Pipeline (stub): --cc fetches public isolates and writes a samplesheet"
+    script "../main.nf"
+    tag "pipeline"
+    tag "stub"
+    options "-stub"
+
+    test("--cc - stub") {
+
+        when {
+            params {
+                cc              = 97
+                outdir          = "$outputDir"
+                skip_qc_gate    = true
+                skip_species_qc = true
+            }
+        }
+
+        then {
+            def sheet = path("$outputDir/pubmlst/samplesheet.csv").readLines()
+            assertAll(
+                { assert workflow.success },
+                { assert path("$outputDir/pubmlst/accessions.txt").exists() },
+                // one row per downloaded accession, pointing at the published reads (reusable with --input)
+                { assert sheet[0] == 'sample,fastq_1,fastq_2,long_fastq' },
+                { assert sheet[1..-1]*.tokenize(',')*.getAt(0) == ['SRR0000001', 'SRR0000002'] },
+                { assert sheet[1] == "SRR0000001,$outputDir/sra/SRR0000001_1.fastq.gz,$outputDir/sra/SRR0000001_2.fastq.gz," },
+                { assert path("$outputDir/sra/SRR0000001_1.fastq.gz").exists() },
+            )
+        }
+    }
+}

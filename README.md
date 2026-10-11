@@ -106,7 +106,7 @@ nextflow run alarawms/staphit2 \
 
 ### Fetching public genomes directly via the pipeline (--cc / --st)
 
-Instead of `--input`, pass `--cc` or `--st` and the pipeline fetches public isolates automatically: `pubmlst_fetch.py` queries PubMLST + NCBI SRA + ENA for matching accessions, then `fasterq-dump` downloads and assembles the samplesheet in-flight.
+Instead of `--input`, pass `--cc` or `--st` and the pipeline fetches public isolates automatically: `pubmlst_fetch.py` queries PubMLST + NCBI SRA + ENA for matching accessions, then `fasterq-dump` downloads each run's paired-end reads straight into the analysis.
 
 ```bash
 # All CC97 isolates (expands ST97, ST1153, ST1154, …)
@@ -140,6 +140,23 @@ nextflow run alarawms/staphit2 \
 ```
 
 Both sources are mixed into a single channel before assembly — `--resume` will reuse cached work for any sample IDs already processed.
+
+What was fetched is saved in `<outdir>/pubmlst/`:
+
+| File              | Contents                                                                                                      |
+| ----------------- | ------------------------------------------------------------------------------------------------------------- |
+| `accessions.txt`  | Run accessions that matched the query                                                                         |
+| `metadata.tsv`    | ST, country, year, host and source per isolate                                                                |
+| `samplesheet.csv` | One row per run that downloaded, pointing at the reads in `<outdir>/sra/`; samples are named by run accession |
+
+To rerun or extend the analysis without downloading again, pass the samplesheet instead of `--cc`:
+
+```bash
+nextflow run alarawms/staphit2 -profile docker \
+    --input results/cc97/pubmlst/samplesheet.csv --outdir results/cc97_rerun
+```
+
+`--cc` / `--st` fetch paired-end Illumina runs only; single-end and ONT runs are skipped. For ONT or hybrid samples, build a samplesheet from `accessions.txt` with `bin/accessions_to_samplesheet.py` (it detects the read type), then use `--input`.
 
 > **Note:** Run from outside the staphit2 directory, or set a dedicated `--outdir`, to avoid Nextflow config conflicts.  
 > SRA downloads require `fasterq-dump` (sra-tools container pulled automatically).
