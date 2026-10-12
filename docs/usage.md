@@ -267,19 +267,20 @@ Databases are downloaded on the first run and published to `<outdir>/databases/`
 
 ### Phylogenetics
 
-| Parameter              | Default    | Description                                                                                                                  |
-| ---------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `--phylo_method`       | `panaroo`  | Core genome method: `panaroo` (pangenome-based) or `snippy` (reference-based)                                                |
-| `--tree_builder`       | `iqtree`   | Tree inference: `iqtree` (ML, slower, more accurate) or `fasttree` (approximate ML, faster)                                  |
-| `--panaroo_clean`      | `moderate` | Panaroo graph-cleaning stringency: `strict`, `moderate`, or `sensitive`                                                      |
-| `--panaroo_threshold`  | `0.95`     | Fraction of samples a gene must appear in to be considered core                                                              |
-| `--panaroo_aligner`    | `mafft`    | Alignment tool used by Panaroo                                                                                               |
-| `--snippy_mincov`      | `10`       | Minimum read depth for Snippy variant calls                                                                                  |
-| `--snippy_minqual`     | `100`      | Minimum mapping quality for Snippy variant calls                                                                             |
-| `--plot_tree`          | `true`     | Draw the annotated tree (PDF + SVG)                                                                                          |
-| `--use_beast`          | `false`    | Gubbins recombination masking + BEAST2 tip-dated phylogeny on the Snippy alignment (needs `--phylo_method snippy` or `both`) |
-| `--beast_chain_length` | `10000000` | BEAST2 MCMC chain length                                                                                                     |
-| `--beast_log_every`    | `1000`     | BEAST2 sampling interval                                                                                                     |
+| Parameter              | Default    | Description                                                                                                                                          |
+| ---------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--phylo_method`       | `panaroo`  | Core genome method: `panaroo` (pangenome-based) or `snippy` (reference-based)                                                                        |
+| `--tree_builder`       | `iqtree`   | Tree inference: `iqtree` (ML, slower, more accurate) or `fasttree` (approximate ML, faster)                                                          |
+| `--panaroo_clean`      | `moderate` | Panaroo graph-cleaning stringency: `strict`, `moderate`, or `sensitive`                                                                              |
+| `--panaroo_threshold`  | `0.95`     | Fraction of samples a gene must appear in to be considered core                                                                                      |
+| `--panaroo_aligner`    | `mafft`    | Alignment tool used by Panaroo                                                                                                                       |
+| `--snippy_mincov`      | `10`       | Minimum read depth for Snippy variant calls                                                                                                          |
+| `--snippy_minqual`     | `100`      | Minimum mapping quality for Snippy variant calls                                                                                                     |
+| `--plot_tree`          | `true`     | Draw the annotated tree (PDF + SVG)                                                                                                                  |
+| `--skip_gubbins`       | `false`    | Skip Gubbins recombination detection on the Snippy alignment (runs by default with `--phylo_method snippy` or `both`)                                |
+| `--use_beast`          | `false`    | BEAST2 tip-dated phylogeny on the Gubbins-masked Snippy alignment (needs `--phylo_method snippy` or `both`; runs Gubbins even with `--skip_gubbins`) |
+| `--beast_chain_length` | `10000000` | BEAST2 MCMC chain length                                                                                                                             |
+| `--beast_log_every`    | `1000`     | BEAST2 sampling interval                                                                                                                             |
 
 ### Clustering
 

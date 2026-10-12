@@ -10,6 +10,7 @@ This page explains how staphit2 decides what to keep, what to flag and how to gr
 - [Resistance genes: consensus across three callers](#resistance-genes-consensus-across-three-callers)
 - [cgMLST](#cgmlst)
 - [Outbreak clustering](#outbreak-clustering)
+- [Recombination (Gubbins)](#recombination-gubbins)
 - [Time-scaled phylogeny (BEAST2)](#time-scaled-phylogeny-beast2)
 - [Reproducibility](#reproducibility)
 
@@ -19,18 +20,18 @@ A sample is **dropped** only when its data cannot support typing: no assembly, a
 
 `report/sample_status.tsv` lists every input sample with its status (`included`, `not_in_tree`, `dropped`), the stage at which it was dropped and why, and its flags. The workflow records which stages each sample reached; the first missing stage is the reason it was dropped. The same flags appear in the `qc_flags` column of `summary/combined_summary.tsv`.
 
-| Stage / flag                         | Drops or flags | Rule (default)                                                         |
-| ------------------------------------ | -------------- | ---------------------------------------------------------------------- |
-| `assembly_failed`                    | drop           | assembler produced no contigs                                          |
-| `assembly_size_out_of_range`         | drop           | assembly length outside 2.5–3.2 Mb                                     |
-| `qc_gate_failed`                     | drop           | CheckM2 completeness < 90% or contamination > 5%                       |
-| `not_s_aureus`                       | drop           | ANI to NCTC 8325 < 95%                                                 |
-| `typing_incomplete`                  | drop           | a typing or AMR step failed for the sample                             |
-| `not_in_tree`                        | kept           | in the summary but not in the phylogeny                                |
-| `low_depth_short` / `low_depth_long` | flag           | trimmed Illumina < 30x / ONT < 20x                                     |
-| `contigs`, `n50`                     | flag           | > 500 contigs / N50 < 10 kb                                            |
-| `mixed_strains`                      | flag           | > 800 mixed sites ([below](#mixed-s-aureus-cultures))                  |
-| `cgmlst_missing`                     | flag           | > 86 of 1,716 cgMLST loci without a call                               |
+| Stage / flag                         | Drops or flags | Rule (default)                                                                                  |
+| ------------------------------------ | -------------- | ----------------------------------------------------------------------------------------------- |
+| `assembly_failed`                    | drop           | assembler produced no contigs                                                                   |
+| `assembly_size_out_of_range`         | drop           | assembly length outside 2.5–3.2 Mb                                                              |
+| `qc_gate_failed`                     | drop           | CheckM2 completeness < 90% or contamination > 5%                                                |
+| `not_s_aureus`                       | drop           | ANI to NCTC 8325 < 95%                                                                          |
+| `typing_incomplete`                  | drop           | a typing or AMR step failed for the sample                                                      |
+| `not_in_tree`                        | kept           | in the summary but not in the phylogeny                                                         |
+| `low_depth_short` / `low_depth_long` | flag           | trimmed Illumina < 30x / ONT < 20x                                                              |
+| `contigs`, `n50`                     | flag           | > 500 contigs / N50 < 10 kb                                                                     |
+| `mixed_strains`                      | flag           | > 800 mixed sites ([below](#mixed-s-aureus-cultures))                                           |
+| `cgmlst_missing`                     | flag           | > 86 of 1,716 cgMLST loci without a call                                                        |
 | `truncated_genes`                    | flag           | long-only assembly with > 80 truncated genes ([below](#long-read-polishing-and-gene-integrity)) |
 
 **Validation.** All 19 samples dropped from the 703-sample run are explained: 17 by the QC gate, 1 not _S. aureus_ (_Enterobacter cloacae_) and 1 empty assembly. The size gate replaces an earlier 500 kb file-size filter and drops the same 19; the depth/contig/N50 flags mark 12 kept samples, including 4 ONT samples under 20x.
@@ -117,9 +118,13 @@ KMA depth is compared with the sample's read depth (bases after trimming / genom
 
 **Validation.** For 13,527 sample pairs within 200 alleles, whole-genome SNPs (Snippy alignment against NCTC 8325, compared pair by pair) were set against cgMLST distances. Pairs within 15 SNPs differed by at most 9 alleles (95th percentile 8), and one allele corresponded to a median of 2.8 SNPs, so the 10-allele tier sits where 15–25 SNPs would. This shows the tiers are consistent with SNP practice; it does not calibrate them. Only epidemiologically confirmed outbreaks can: give `bin/staphit-calibrate-thresholds` the distance matrix and a `sample_id<TAB>outbreak` list (`sporadic` for unlinked samples) and it reports, for every threshold, the share of linked pairs caught (sensitivity), the share of unlinked pairs kept apart (specificity) and the threshold with the highest Youden's J.
 
+## Recombination (Gubbins)
+
+Gubbins (3.4) runs by default on Snippy's whole-genome alignment (`--skip_gubbins` turns it off). Imported segments carry many SNPs at once, so they lengthen branches and inflate SNP distances without reflecting time since a common ancestor. Gubbins reports the recombinant regions and r/m per branch, builds a recombination-aware tree, and masks those regions; `snpdists/gubbins_masked.tsv` holds SNP distances after masking. Clustering is not switched to the masked distances: the default cgMLST clustering is already robust to recombination (an imported segment changes at most one allele per locus), and the SNP thresholds were set on unmasked alignments.
+
 ## Time-scaled phylogeny (BEAST2)
 
-With `--use_beast`, Gubbins first finds and masks recombination in Snippy's whole-genome alignment, because imported segments carry many SNPs at once and would inflate the clock rate. BEAST2 (2.7) then gets the variable sites of the masked alignment plus the counts of invariant A/C/G/T sites (`constantSiteWeights`), so rates are not overestimated from analysing variable sites only. Model: HKY + Γ4, strict clock, constant-size coalescent. With a collection date for every sample, the clock rate is estimated under a log-normal prior centred on ~1 × 10⁻⁶ substitutions/site/year; otherwise the clock is fixed and branch lengths are substitutions/site. Check convergence (ESS > 200 in Tracer on `beast2/beast_run.log`) before using dates; the default chain is 10 million steps.
+With `--use_beast`, BEAST2 (2.7) dates the Gubbins-masked alignment, since recombination would inflate the clock rate. It gets the variable sites of the masked alignment plus the counts of invariant A/C/G/T sites (`constantSiteWeights`), so rates are not overestimated from analysing variable sites only. Model: HKY + Γ4, strict clock, constant-size coalescent. With a collection date for every sample, the clock rate is estimated under a log-normal prior centred on ~1 × 10⁻⁶ substitutions/site/year; otherwise the clock is fixed and branch lengths are substitutions/site. Check convergence (ESS > 200 in Tracer on `beast2/beast_run.log`) before using dates; the default chain is 10 million steps.
 
 Before this was fixed, `--use_beast` could not run: the generated XML used BEAST 2.6 class names that 2.7 rejects, the container could not load its packages under Docker's `-u`, and TreeAnnotator's arguments had changed.
 

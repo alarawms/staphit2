@@ -575,6 +575,11 @@
             "fa_icon": "fas fa-clock",
             "description": "Optional Bayesian time-calibrated phylogenetics with BEAST2 (activate with --use_beast).",
             "properties": {
+                "skip_gubbins": {
+                    "type": "boolean",
+                    "description": "Skip Gubbins recombination detection on the Snippy alignment (runs by default with --phylo_method snippy or both; always runs with --use_beast).",
+                    "fa_icon": "fas fa-forward"
+                },
                 "use_beast": {
                     "type": "boolean",
                     "default": false,
