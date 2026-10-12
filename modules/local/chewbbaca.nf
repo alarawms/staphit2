@@ -10,7 +10,7 @@ process CGMLST_SCHEMA {
 
     script:
     """
-    staphit-cgmlst-schema -o schema_fasta --db ${params.cgmlst_pubmlst_db} --scheme ${params.cgmlst_pubmlst_scheme} --threads 4
+    staphit-cgmlst-schema -o schema_fasta --db ${params.cgmlst_pubmlst_db} --scheme ${params.cgmlst_pubmlst_scheme}
     """
 
     stub:

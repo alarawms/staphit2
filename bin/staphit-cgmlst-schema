@@ -18,7 +18,7 @@ import urllib.request
 API = 'https://rest.pubmlst.org/db'
 
 
-def get(url, tries=5):
+def get(url, tries=8):
     for attempt in range(tries):
         try:
             with urllib.request.urlopen(url, timeout=120) as r:
@@ -26,7 +26,11 @@ def get(url, tries=5):
         except Exception as e:  # network blips / rate limiting: back off and retry
             if attempt == tries - 1:
                 raise RuntimeError(f'{url}: {e}')
-            time.sleep(2 ** attempt)
+            wait = min(5 * 2 ** attempt, 300)  # 5 s .. 5 min, ~10 min in total
+            if getattr(e, 'code', None) == 429:  # PubMLST rate limit: honour Retry-After
+                retry_after = e.headers.get('Retry-After', '')
+                wait = max(wait, int(retry_after) if retry_after.isdigit() else 60)
+            time.sleep(wait)
 
 
 def fetch_locus(url, outdir):
@@ -47,7 +51,7 @@ def main(argv=None):
     ap.add_argument('-o', '--outdir', required=True)
     ap.add_argument('--db', default='pubmlst_saureus_seqdef')
     ap.add_argument('--scheme', type=int, default=20)
-    ap.add_argument('--threads', type=int, default=4, help='parallel downloads (be polite to PubMLST)')
+    ap.add_argument('--threads', type=int, default=2, help='parallel downloads (be polite to PubMLST)')
     a = ap.parse_args(argv)
 
     scheme = json.loads(get(f'{API}/{a.db}/schemes/{a.scheme}'))
