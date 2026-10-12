@@ -26,7 +26,7 @@ ONT reads      → NanoPlot ─────────────────�
            ├→ reads vs own assembly → mixed-strain check
            ├→ Prokka → truncated-gene check (ONT only)
            ├→ Prokka → Panaroo → IQ-TREE → SNP-dists          (tree)
-           ├→ Snippy → [Gubbins → BEAST2]                       (optional dating)
+           ├→ Snippy → Gubbins (recombination) → [BEAST2]      (optional dating)
            └→ chewBBACA cgMLST (PubMLST scheme 20) → allele distances
                                                              │
         Aggregator → Summary + QC flags → Outbreak clustering (cgMLST) → Report, figures, iTOL, MultiQC
@@ -355,6 +355,7 @@ Failures are non-fatal: the script exits 0 and writes a `PLOT_TREE_FAILED` file 
 | `--panaroo_threshold`                    | `0.95`      | Core genome threshold                                                                         |
 | `--snippy_mincov`                        | `10`        | Snippy minimum read depth                                                                     |
 | `--snippy_minqual`                       | `100`       | Snippy minimum mapping quality                                                                |
+| `--skip_gubbins`                         | `false`     | Skip Gubbins recombination detection on the Snippy alignment                                  |
 | **BEAST2 Bayesian phylodynamics**        |             |                                                                                               |
 | `--use_beast`                            | `false`     | Enable BEAST2 time-calibrated Bayesian phylogeny (requires `--phylo_method snippy` or `both`) |
 | `--beast_chain_length`                   | `10000000`  | MCMC chain length (steps)                                                                     |
@@ -433,6 +434,7 @@ results/
 ├── prokka/             # Genome annotations
 ├── panaroo/            # Pangenome analysis
 ├── iqtree/             # Phylogenetic tree
+├── gubbins/            # Recombination regions, recombination-aware tree, masked SNPs
 ├── beast2/             # Bayesian phylogeny (only if --use_beast)
 │   ├── beast_mcc.tree  # Maximum clade credibility annotated tree
 │   ├── beast_run.log   # BEAST2 MCMC trace (ESS diagnostics in Tracer)

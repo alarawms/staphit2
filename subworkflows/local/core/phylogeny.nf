@@ -17,6 +17,7 @@ include { FASTTREE           } from '../../../modules/local/fasttree'
 include { IQTREE             } from '../../../modules/nf-core/iqtree/main'
 include { SNPDISTS as SNPDISTS_CORE   } from '../../../modules/nf-core/snpdists/main'
 include { SNPDISTS as SNPDISTS_SNIPPY } from '../../../modules/nf-core/snpdists/main'
+include { SNPDISTS as SNPDISTS_GUBBINS } from '../../../modules/nf-core/snpdists/main'
 include { BEAST2_PREP; BEAST2         } from '../../../modules/local/beast2'
 include { GUBBINS                     } from '../../../modules/local/gubbins'
 
@@ -79,14 +80,22 @@ workflow PHYLOGENY {
         ch_snippy_dists = SNPDISTS_SNIPPY.out.tsv
         ch_versions = ch_versions.mix(SNPDISTS_SNIPPY.out.versions)
 
+        // Recombination (Gubbins, on by default): recombination-aware tree and
+        // SNP distances after masking imported segments. --skip_gubbins turns it off
+        // unless BEAST2 needs it.
+        if (!params.skip_gubbins || params.use_beast) {
+            GUBBINS ( SNIPPY_CORE.out.full_aln )
+            SNPDISTS_GUBBINS ( GUBBINS.out.snps.map { aln -> [ [id: 'gubbins_masked'], aln ] } )
+            ch_versions = ch_versions.mix(SNPDISTS_GUBBINS.out.versions)
+        }
+
         // Optional Bayesian phylodynamics (--use_beast)
         if (params.use_beast) {
             ch_metadata = params.metadata
                 ? channel.fromPath(params.metadata, checkIfExists: true)
                 : channel.fromPath("${projectDir}/assets/NO_METADATA")
-            // Mask recombination (Gubbins) and pass invariant-site counts so BEAST2 dates
+            // Masked variable sites + invariant-site counts so BEAST2 dates
             // vertical descent only and corrects for an alignment of variable sites
-            GUBBINS ( SNIPPY_CORE.out.full_aln )
             BEAST2_PREP ( GUBBINS.out.snps, GUBBINS.out.constant, ch_metadata )
             BEAST2 ( BEAST2_PREP.out.xml )
             ch_beast2_tree = BEAST2.out.mcc_tree

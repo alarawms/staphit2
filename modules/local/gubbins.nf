@@ -13,7 +13,7 @@ process GUBBINS {
     path "gubbins.recombination_predictions.gff",   emit: gff
     path "gubbins.final_tree.tre",                  emit: tree
     path "gubbins.per_branch_statistics.csv",       emit: stats
-    tuple val("${task.process}"), val('gubbins'), eval('run_gubbins.py --version'), topic: versions, emit: versions_gubbins
+    tuple val("${task.process}"), val('gubbins'), eval('NUMBA_CACHE_DIR=.numba_cache run_gubbins.py --version'), topic: versions, emit: versions_gubbins
 
     script:
     """
