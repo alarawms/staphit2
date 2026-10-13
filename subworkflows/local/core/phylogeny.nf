@@ -30,8 +30,12 @@ workflow PHYLOGENY {
     main:
 
     ch_versions   = channel.empty()
-    ch_snippy_dists = channel.empty()
     ch_beast2_tree  = channel.empty()
+    // SNP distances for clustering and transmission pairs: Gubbins-masked SNPs, else
+    // Snippy whole-genome SNPs, else (--phylo_method panaroo) the Panaroo core. The
+    // Panaroo core adds hundreds of SNPs between genomes that cgMLST and Snippy call
+    // identical (paralogs, gene-by-gene alignment), so it is only used for the tree.
+    ch_cluster_dists = channel.empty()
 
     //
     // MODULE: Annotate assemblies with Prokka (needed for Panaroo)
@@ -62,6 +66,7 @@ workflow PHYLOGENY {
         // SNP distances from core genes (for tree visualization)
         SNPDISTS_CORE ( ch_panaroo_aln.map { aln -> [ [id: 'panaroo_core'], aln ] } )
         ch_versions = ch_versions.mix(SNPDISTS_CORE.out.versions)
+        ch_cluster_dists = SNPDISTS_CORE.out.tsv
     }
 
     //
@@ -77,7 +82,7 @@ workflow PHYLOGENY {
 
         // SNP distances from whole-genome (for outbreak clustering)
         SNPDISTS_SNIPPY ( SNIPPY_CORE.out.aln.map { aln -> [ [id: 'snippy_wgs'], aln ] } )
-        ch_snippy_dists = SNPDISTS_SNIPPY.out.tsv
+        ch_cluster_dists = SNPDISTS_SNIPPY.out.tsv
         ch_versions = ch_versions.mix(SNPDISTS_SNIPPY.out.versions)
 
         // Recombination (Gubbins, on by default): recombination-aware tree and
@@ -87,6 +92,7 @@ workflow PHYLOGENY {
             GUBBINS ( SNIPPY_CORE.out.full_aln )
             SNPDISTS_GUBBINS ( GUBBINS.out.snps.map { aln -> [ [id: 'gubbins_masked'], aln ] } )
             ch_versions = ch_versions.mix(SNPDISTS_GUBBINS.out.versions)
+            ch_cluster_dists = SNPDISTS_GUBBINS.out.tsv
         }
 
         // Optional Bayesian phylodynamics (--use_beast)
@@ -118,17 +124,6 @@ workflow PHYLOGENY {
             ch_versions = ch_versions.mix(SNPDISTS_CORE.out.versions)
         }
     }
-
-    //
-    // Select which SNP distances to use for clustering
-    // 'both'/'panaroo' mode: Panaroo core gene distances (preserves cross-lineage
-    //   resolution in diverse multi-ST collections; Snippy WGS core collapses when
-    //   the reference-based core narrows across divergent lineages).
-    // 'snippy' mode: Snippy WGS distances (only option when Panaroo not run).
-    //
-    ch_cluster_dists = (params.phylo_method == 'snippy')
-        ? ch_snippy_dists
-        : SNPDISTS_CORE.out.tsv
 
     emit:
     prokka_gff    = PROKKA.out.gff        // [ val(meta), path(gff) ]

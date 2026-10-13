@@ -542,8 +542,8 @@
                 },
                 "cluster_snp_tiers": {
                     "type": "string",
-                    "default": "15,50,200",
-                    "description": "SNP thresholds (comma-separated) used with --cluster_by snp|both, and for transmission pairs. Calibrated for the Panaroo core-gene alignment; for Snippy whole-genome distances (--phylo_method snippy) use 5,15,40."
+                    "default": "5,15,40",
+                    "description": "SNP thresholds (comma-separated) used with --cluster_by snp|both, and for transmission pairs. Applied to whole-genome SNPs (Gubbins-masked, else Snippy); with --phylo_method panaroo the Panaroo core is used instead and wider tiers (e.g. 15,50,200) fit better."
                 },
                 "skip_cgmlst": {
                     "type": "boolean",

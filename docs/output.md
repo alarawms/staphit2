@@ -575,7 +575,7 @@ All samples are called in one chewBBACA run, so new alleles get the same number 
 
 </details>
 
-`bin/staphit-cluster` applies single-linkage clustering at three tiers. By default (`--cluster_by cgmlst`) it clusters on cgMLST allele differences, which do not depend on which other lineages are in the run; `--cluster_by snp` uses the SNP distances (Panaroo core genes) and `both` links samples that either distance links. Without cgMLST (`--skip_cgmlst`) it falls back to SNPs.
+`bin/staphit-cluster` applies single-linkage clustering at three tiers. By default (`--cluster_by cgmlst`) it clusters on cgMLST allele differences, which do not depend on which other lineages are in the run; `--cluster_by snp` uses the SNP distances (Gubbins-masked, else Snippy whole-genome; Panaroo core only with `--phylo_method panaroo`) and `both` links samples that either distance links. Without cgMLST (`--skip_cgmlst`) it falls back to SNPs.
 
 | Tier                  | cgMLST (default) | SNP (`--cluster_by snp`) | Interpretation             |
 | --------------------- | ---------------- | ------------------------ | -------------------------- |
