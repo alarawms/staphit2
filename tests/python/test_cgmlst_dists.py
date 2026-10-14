@@ -23,3 +23,11 @@ def test_distances_ignore_missing_and_read_inferred(tmp_path):
     m = {r[0]: [int(x) for x in r[1:]] for r in rows[1:]}
     assert m['A'] == [0, 1, 2] and m['B'] == [1, 0, 2] and m['C'] == [2, 2, 0]
     assert stats.read_text().splitlines()[1:] == ['A\t4\t0\t4', 'B\t3\t1\t4', 'C\t2\t2\t4']
+
+
+def test_grapetree_profile_marks_missing_with_dash(tmp_path):
+    profiles = tmp_path / 'results_alleles.tsv'
+    profiles.write_text('FILE\tL1\tL2\nA.fasta\tINF-9\tLNF\nB\t1\t2\n')
+    gt = tmp_path / 'gt.tsv'
+    cd.main([str(profiles), str(tmp_path / 'd.tsv'), str(tmp_path / 's.tsv'), '--grapetree', str(gt)])
+    assert gt.read_text().splitlines() == ['#name\tL1\tL2', 'A\t9\t-', 'B\t1\t2']

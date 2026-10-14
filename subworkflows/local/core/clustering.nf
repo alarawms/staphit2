@@ -14,6 +14,8 @@ include { CHEWBBACA_PREP   } from '../../../modules/local/chewbbaca'
 include { CHEWBBACA_ALLELE } from '../../../modules/local/chewbbaca'
 include { CGMLST_DISTS     } from '../../../modules/local/chewbbaca'
 include { OUTBREAK_CLUSTER } from '../../../modules/local/outbreak_cluster'
+include { GRAPETREE        } from '../../../modules/local/grapetree'
+include { MST_PLOT         } from '../../../modules/local/grapetree'
 
 workflow CLUSTERING {
 
@@ -47,6 +49,12 @@ workflow CLUSTERING {
     }
 
     OUTBREAK_CLUSTER ( ch_snp_dists, ch_cgmlst_dists, ch_summary )
+
+    // cgMLST minimum spanning tree, annotated with the summary metadata and clusters
+    if (!params.skip_cgmlst) {
+        GRAPETREE ( CGMLST_DISTS.out.grapetree )
+        MST_PLOT ( GRAPETREE.out.tree, ch_summary, OUTBREAK_CLUSTER.out.clusters )
+    }
 
     emit:
     clusters     = OUTBREAK_CLUSTER.out.clusters  // path(clusters.tsv)

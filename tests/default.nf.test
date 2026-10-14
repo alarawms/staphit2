@@ -44,11 +44,14 @@ nextflow_pipeline {
                 { assert path("$outputDir/qc/truncated_genes").list()*.fileName*.toString() == ['LONG1.truncated.tsv'] },
                 // cgMLST clustering is on by default
                 { assert path("$outputDir/cgmlst/cgmlst_distances.tsv").exists() },
+                // annotated cgMLST minimum spanning tree + GrapeTree metadata
+                { assert path("$outputDir/cgmlst/cgmlst_mst.nwk").exists() },
+                { assert path("$outputDir/cgmlst/grapetree_metadata.tsv").exists() },
                 // Gubbins runs by default on the Snippy alignment
                 { assert path("$outputDir/gubbins/gubbins.recombination_predictions.gff").exists() },
                 { assert path("$outputDir/snpdists/gubbins_masked.tsv").exists() },
                 // local modules report versions
-                { assert ['DRAGONFLYE:', 'FASTP:', 'NANOPLOT:', 'SCCMEC:', 'FETCH_RESFINDER_DB:'].every { versions.contains(it) } },
+                { assert ['DRAGONFLYE:', 'FASTP:', 'NANOPLOT:', 'SCCMEC:', 'FETCH_RESFINDER_DB:', 'GRAPETREE:'].every { versions.contains(it) } },
             )
         }
     }

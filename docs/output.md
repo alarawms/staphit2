@@ -558,6 +558,10 @@ Gene names are matched across tools by family (allele numbers and accessions rem
   - `results_statistics.tsv`: chewBBACA classification counts per sample.
   - `cgmlst_distances.tsv`: pairwise allele differences (loci called in both samples).
   - `cgmlst_stats.tsv`: loci called and missing per sample.
+  - `grapetree_profile.tsv`: the allele calls in GrapeTree format (`-` = no call).
+  - `cgmlst_mst.nwk`: minimum spanning tree (GrapeTree MSTreeV2, which tolerates missing loci); branch lengths are allele differences.
+  - `cgmlst_mst.pdf`: the MST drawn once per annotation: country, ST, SCCmec, host, isolation source, collection year, PVL and outbreak cluster. Numbers on edges are allele differences; edges are drawn on a log scale so distant lineages don't squash the rest.
+  - `grapetree_metadata.tsv`: per-sample annotations (`ID` first) for interactive viewing: open [GrapeTree](https://achtman-lab.github.io/GrapeTree/MSTree_holder.html), load `cgmlst_mst.nwk`, then drag in this file and colour nodes by any column.
 
 </details>
 
