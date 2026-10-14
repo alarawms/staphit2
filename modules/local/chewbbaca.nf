@@ -85,16 +85,18 @@ process CGMLST_DISTS {
     output:
     path "cgmlst_distances.tsv", emit: dists
     path "cgmlst_stats.tsv",     emit: stats
+    path "grapetree_profile.tsv", emit: grapetree
     tuple val("${task.process}"), val('python'), eval("python3 --version | sed 's/Python //'"), topic: versions, emit: versions_python
 
     script:
     """
-    staphit-cgmlst-dists ${profiles} cgmlst_distances.tsv cgmlst_stats.tsv
+    staphit-cgmlst-dists ${profiles} cgmlst_distances.tsv cgmlst_stats.tsv --grapetree grapetree_profile.tsv
     """
 
     stub:
     """
     touch cgmlst_distances.tsv
     printf "sample_id\\tcalled_loci\\tmissing_loci\\ttotal_loci\\n" > cgmlst_stats.tsv
+    touch grapetree_profile.tsv
     """
 }
