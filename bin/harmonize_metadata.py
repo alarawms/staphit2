@@ -13,7 +13,7 @@ UNKNOWN = 'Unknown'
 HOST_NAMES = {
     'homo sapiens': 'Human', 'camelus dromedarius': 'Camel', 'bos taurus': 'Cattle',
     'ovis aries': 'Sheep', 'capra hircus': 'Goat', 'gallus gallus': 'Chicken',
-    'sus scrofa': 'Pig', 'equus caballus': 'Horse', 'canis lupus familiaris': 'Dog',
+    'sus scrofa': 'Pig', 'bovine': 'Cattle', 'cow': 'Cattle', 'human': 'Human', 'equus caballus': 'Horse', 'canis lupus familiaris': 'Dog',
     'felis catus': 'Cat', 'vertebrata': 'Animal (unspecified)',
 }
 
@@ -63,7 +63,7 @@ def year(collection_date):
 
 
 def host_group(host):
-    h = (host or '').strip().lower()
+    h = (host or '').strip().lower().replace('_', ' ')
     if not h:
         return UNKNOWN
     return HOST_NAMES.get(h, h[:1].upper() + h[1:])
@@ -106,6 +106,7 @@ if __name__ == '__main__':  # self-test
     assert year('2020-03-01') == '2020' and year('') == UNKNOWN
     assert host_group('Homo sapiens') == 'Human' and host_group('Vertebrata') == 'Animal (unspecified)'
     assert host_group('') == UNKNOWN and host_group('mus musculus') == 'Mus musculus'
+    assert host_group('Homo_sapiens') == 'Human' and host_group('Bovine') == 'Cattle'
     cases = {'clinical sample': 'Clinical, unspecified', 'PERIPHERAL': 'Blood', 'Chiken': 'Food: meat',
              'goat milk': 'Food: milk/dairy', 'fish': 'Food: fish', 'Goat Nasal swabs': 'Nasal swab',
              'retail meat from Camelus dromedarius': 'Food: meat', 'env': 'Environment',

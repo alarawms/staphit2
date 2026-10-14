@@ -93,6 +93,9 @@ def build(tips, rows, clusters):
     files['07_source_strip.txt'] = colorstrip('Isolation source', ids, src,
                                               palette_for(src, hm.SOURCE_COLORS), order=list(hm.SOURCE_COLORS))
 
+    country = top_n([r.get('geo_loc_country') or hm.UNKNOWN for r in R], 12)
+    files['07b_country_strip.txt'] = colorstrip('Country (top 12)', ids, country, palette_for(country))
+
     cl = [clusters.get(i, '') for i in ids]
     multi = {c for c, n in Counter(c for c in cl if c).items() if n > 1}
     top = {c for c, _ in Counter(c for c in cl if c in multi).most_common(15)}

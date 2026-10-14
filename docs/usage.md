@@ -102,14 +102,16 @@ MRSA_002,Vancomycin,susceptible,0.5,mg/L,<=,MIC,CLSI
 
 ### Fetching metadata for public samples
 
-`bin/fetch_metadata.py` reads BioSample accessions from any file (e.g. the samplesheet) and pulls harmonized attributes (collection date, country, host, isolation source) from NCBI BioSample, writing a metadata CSV ready for `--metadata` plus a completeness report:
+`bin/fetch_metadata.py` reads BioSample accessions from any file (e.g. the samplesheet; samples named by run accession, as `--cc` downloads are, are resolved to their BioSample through ENA) and pulls harmonized attributes (collection date, country, host, isolation source) from NCBI BioSample, writing a metadata CSV ready for `--metadata` plus a completeness report:
 
 ```bash
 bin/fetch_metadata.py samplesheet.csv metadata.csv     # also writes metadata.completeness.tsv
 nextflow run alarawms/staphit2 -profile docker --input samplesheet.csv --metadata metadata.csv --outdir results
 ```
 
-Set `NCBI_API_KEY` to raise NCBI's rate limit. Year, host group and source group labels are harmonized by `bin/harmonize_metadata.py` (food categories are kept separate) and used by the summary table, the tree plot and the iTOL files.
+Set `NCBI_API_KEY` to raise NCBI's rate limit. Year, host group and source group labels are harmonized by `bin/harmonize_metadata.py` (food categories are kept separate) and used by the summary table, the tree plot and the iTOL files (with country, as a ring and a strip), and summarised in the **Sample Metadata** section of `report/run_report.md`.
+
+To combine public and local samples in one run, concatenate the two CSVs (same header), e.g. `fetch_metadata.py` output for the public rows plus `staphit-metadata convert --from-master-csv` output for the local ones.
 
 ### Generating metadata from lab data
 

@@ -281,3 +281,18 @@ class TestCountFrequencies:
     def test_empty_series(self):
         result = report_mod._count_frequencies([])
         assert len(result) == 0
+
+
+def test_metadata_section_counts_country_year_host_source():
+    rows = [dict(geo_loc_country='Saudi Arabia', year='2019', host_group='Human', source_group='Blood'),
+            dict(geo_loc_country='Netherlands', year='2017', host_group='Cattle', source_group='Unknown'),
+            dict(geo_loc_country='', year='', host_group='', source_group='')]
+    md = report_mod.build_metadata(rows)
+    assert 'Filled: country 2/3, collection year 2/3, host 2/3, isolation source 1/3' in md
+    assert '| Saudi Arabia | 1 | 33.3 |' in md
+    years = md.split('### Collection year')[1].split('###')[0]
+    assert years.index('| 2017 |') < years.index('| 2019 |') < years.index('| Unknown |')   # chronological
+
+
+def test_metadata_section_absent_without_metadata():
+    assert report_mod.build_metadata([dict(sample_id='A'), dict(sample_id='B', geo_loc_country='')]) == ''
