@@ -88,14 +88,18 @@ meta <- meta |>
 # ── Harmonized metadata labels ─────────────────────────────────────────────────
 # year / host_group / source_group come from the summary (bin/harmonize_metadata.py
 # is the single source of truth for the rules); absent columns -> Unknown.
-for (col in c("year", "host_group", "source_group"))
+for (col in c("year", "host_group", "source_group", "geo_loc_country"))
   if (!col %in% names(meta)) meta[[col]] <- NA_character_
 meta <- meta |>
   mutate(
     year_lab   = coalesce(as.character(year), "Unknown"),
     host_lab   = coalesce(host_group, "Unknown"),
-    source_lab = coalesce(source_group, "Unknown")
+    source_lab = coalesce(source_group, "Unknown"),
+    country    = coalesce(geo_loc_country, "Unknown")
   )
+# top 12 countries keep their own colour; the rest become "Other"
+top_countries <- names(sort(table(meta$country[meta$country != "Unknown"]), decreasing = TRUE))[seq_len(12)]
+meta$country_lab <- ifelse(meta$country %in% c(top_countries, "Unknown"), meta$country, "Other")
 
 if (file.exists(cluster_file)) {
   meta <- left_join(meta,
@@ -166,6 +170,9 @@ host_colors <- c(setNames(c("#636363", "#a6761d", "#1b9e77", "#7570b3", "#e7298a
                  Unknown = "#f0f0f0")
 extra_hosts <- setdiff(unique(meta$host_lab), names(host_colors))
 host_colors <- c(host_colors, setNames(rep("#969696", length(extra_hosts)), extra_hosts))
+countries      <- sort(setdiff(unique(meta$country_lab), c("Other", "Unknown")))
+country_colors <- c(setNames(colorRampPalette(brewer.pal(12, "Paired"))(max(1, length(countries)))[seq_along(countries)],
+                             countries), Other = "#bdbdbd", Unknown = "#f0f0f0")
 source_colors <- c(
   "Blood" = "#e41a1c", "Wound / skin & soft tissue" = "#ff7f00", "Nasal swab" = "#4daf4a",
   "Respiratory" = "#377eb8", "Urine" = "#ffff33", "Other clinical site" = "#a65628",
@@ -210,7 +217,7 @@ p <- ggtree(tree, layout = "circular", linewidth = 0.15, color = "grey40") %<+% 
   ) +
   labs(
     title   = sprintf("%s - Core SNP phylogeny (%d isolates)", run_name, Ntip(tree)),
-    caption = "Rings (inner->outer): SCCmec | agr group | PVL | TSST | mecA | collection year | host | isolation source | Top-12 outbreak clusters"
+    caption = "Rings (inner->outer): SCCmec | agr group | PVL | TSST | mecA | collection year | host | isolation source | country | Top-12 outbreak clusters"
   )
 
 p <- add_ring(p, "sccmec",
@@ -230,6 +237,9 @@ p <- add_ring(p, "host_lab",
   scale_fill_manual(values = host_colors,   name = "Host",      na.value = "#f0f0f0"))
 p <- add_ring(p, "source_lab",
   scale_fill_manual(values = source_colors, name = "Isolation\nsource", na.value = "#f0f0f0"))
+
+p <- add_ring(p, "country_lab",
+  scale_fill_manual(values = country_colors, name = "Country", na.value = "#f0f0f0"))
 
 if (n_ob > 0) {
   p <- add_ring(p, "ob_strip",

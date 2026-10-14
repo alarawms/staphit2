@@ -213,6 +213,27 @@ def build_typing_overview(rows):
     return '\n'.join(lines)
 
 
+def build_metadata(rows):
+    """Where, when and from what the isolates came (--metadata columns in the summary)."""
+    total = len(rows)
+    fields = [('geo_loc_country', 'Country', 15), ('year', 'Collection year', 30),
+              ('host_group', 'Host', 10), ('source_group', 'Isolation source', 12)]
+    counters = [(Counter(r.get(col) or 'Unknown' for r in rows), label, n) for col, label, n in fields]
+    if not total or all(set(c) <= {'Unknown'} for c, _, _ in counters):
+        return ""
+    lines = ["## Sample Metadata", "",
+             "Filled: " + ", ".join(f"{label.lower()} {total - c['Unknown']}/{total}"
+                                    for c, label, _ in counters), ""]
+    for c, label, n in counters:
+        if label == 'Collection year':     # chronological, not by count
+            c = Counter(dict(sorted(c.items(), key=lambda kv: (kv[0] == 'Unknown', kv[0]))))
+            lines += [f"### {label}", "", "| Year | Count |", "| --- | ---: |"]
+            lines += [f"| {k} | {v} |" for k, v in c.items()] + [""]
+        else:
+            lines += [f"### {label}", "", _freq_table(c, n, total, label), ""]
+    return '\n'.join(lines)
+
+
 def build_resistance(rows):
     """Build Resistance section with AMR gene and point mutation frequencies."""
     total = len(rows)
@@ -470,6 +491,7 @@ def generate_report(summary_path, cluster_path=None, qc_path=None,
     sections.append(build_read_qc(rows))
     sections.append(build_assembly_qc(rows))
     sections.append(build_typing_overview(rows))
+    sections.append(build_metadata(rows))
     sections.append(build_resistance(rows))
     sections.append(build_virulence(rows))
     sections.append(build_outbreak_clusters(cluster_path))

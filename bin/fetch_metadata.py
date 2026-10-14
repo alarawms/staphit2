@@ -4,7 +4,8 @@
 Input: any file containing BioSample accessions (SAMN/SAMEA/SAMD) — a staphit2
 samplesheet, a manifest, a plain list. For a samplesheet (has a 'sample' column),
 one metadata row is written per sample (merged samples like SAMEA1_SAMEA2 combine
-their BioSamples); otherwise one row per BioSample.
+their BioSamples; samples named by run accession, e.g. from --cc, are resolved to their
+BioSample through ENA); otherwise one row per BioSample.
 
 NCBI BioSample mirrors all INSDC BioSamples (incl. ENA's SAMEA) and maps submitter
 attributes to harmonized names (collection_date, geo_loc_name, host, ...). These are
@@ -33,6 +34,7 @@ import xml.etree.ElementTree as ET
 from datetime import datetime
 
 EUTILS = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
+ENA_SEARCH = "https://www.ebi.ac.uk/ena/portal/api/search"
 BIOSAMPLE = re.compile(r"(?<![A-Za-z0-9])SAM(?:N|EA|D)\d+(?![0-9])")
 RUN = re.compile(r"(?<![A-Za-z0-9])[EDS]RR\d{6,}(?![0-9])")
 
@@ -143,7 +145,7 @@ def merge_rows(rows):
 
 # ── NCBI fetch ───────────────────────────────────────────────────────────────
 def _get(url, params, tries=6):
-    if os.environ.get('NCBI_API_KEY'):
+    if os.environ.get('NCBI_API_KEY') and url.startswith(EUTILS):
         params = dict(params, api_key=os.environ['NCBI_API_KEY'])
     data = urllib.parse.urlencode(params).encode()
     for attempt in range(1, tries + 1):
@@ -192,6 +194,23 @@ def fetch_biosamples(accessions, batch=150):
     return found
 
 
+def runs_to_biosamples(runs, batch=100):
+    """{run: biosample} from ENA, for samples named by run accession (e.g. --cc downloads)."""
+    out = {}
+    runs = sorted(set(runs))
+    for i in range(0, len(runs), batch):
+        query = ' OR '.join(f'run_accession={r}' for r in runs[i:i + batch])
+        tsv = _get(ENA_SEARCH, {'result': 'read_run', 'query': query,
+                                'fields': 'sample_accession', 'format': 'tsv'}).decode()
+        out.update(parse_run_tsv(tsv))
+    return out
+
+
+def parse_run_tsv(tsv):
+    rows = csv.DictReader(tsv.splitlines(), delimiter='\t')
+    return {r['run_accession']: r['sample_accession'] for r in rows if r.get('sample_accession')}
+
+
 # ── Input & reporting ────────────────────────────────────────────────────────
 def samples_from_file(path):
     """[(sample_id, [biosamples], [runs])]. Samplesheet -> per 'sample'; else per BioSample."""
@@ -219,6 +238,12 @@ def completeness(rows):
 
 def main(src, dst):
     samples = samples_from_file(src)
+    # samples named by run (ERR/SRR/DRR) carry no BioSample in their name: look it up in ENA
+    no_bs = [r for _, bs, runs in samples if not bs for r in runs]
+    if no_bs:
+        r2b = runs_to_biosamples(no_bs)
+        samples = [(sid, bs or list(dict.fromkeys(r2b[r] for r in runs if r in r2b)), runs)
+                   for sid, bs, runs in samples]
     records = fetch_biosamples([b for _, bs, _ in samples for b in bs])
     rows, not_found = [], []
     for sid, bss, runs in samples:
@@ -271,6 +296,7 @@ def _selftest():
     other = dict(row, collection_date='', host_disease='sepsis', biosample_accession='SAMEA2')
     m = merge_rows([dict(row, host_disease=''), other])
     assert m['host_disease'] == 'sepsis' and m['biosample_accession'] == 'SAMEA1;SAMEA2'
+    assert parse_run_tsv('run_accession\tsample_accession\nERR1\tSAMEA9\nERR2\t\n') == {'ERR1': 'SAMEA9'}
     print('selftest ok')
 
 
