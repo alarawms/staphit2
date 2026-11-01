@@ -36,7 +36,7 @@ process SNIPPY_CORE {
 
     output:
     path "core.aln", emit: aln
-    path "core.full.aln", emit: full_aln   // whole-genome alignment (for Gubbins)
+    path "core.full.aln", emit: full_aln   // whole-genome alignment, upper case (Gubbins, SNP distances)
     tuple val("${task.process}"), val('snippy'), eval("snippy --version 2>&1 | sed 's/^snippy //'"), topic: versions, emit: versions_snippy
 
     script:
@@ -74,6 +74,12 @@ process SNIPPY_CORE {
     fi
 
     snippy-core --ref ${reference} \$GOOD_DIRS
+
+    # snippy-core writes every called variant in lower case in core.full.aln. snp-dists,
+    # Gubbins and beast_alignment.py read only upper-case A/C/G/T, so those variants were
+    # silently dropped. Upper-case the sequence lines (not the headers).
+    awk '/^>/ { print; next } { print toupper(\$0) }' core.full.aln > core.full.uc.aln
+    mv core.full.uc.aln core.full.aln
     """
 
     stub:

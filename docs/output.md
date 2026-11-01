@@ -392,7 +392,7 @@ When `--tree_builder fasttree` is selected, output appears in `fasttree/` contai
 
 </details>
 
-[SNP-dists](https://github.com/tseemann/snp-dists) computes pairwise SNP distances from the core genome alignment. This matrix is consumed by the clustering module and is also useful for manual inspection of isolate relatedness.
+[SNP-dists](https://github.com/tseemann/snp-dists) computes pairwise SNP distances. `snippy_wgs.tsv` and `gubbins_masked.tsv` use the whole-genome alignment, comparing each pair only at sites where both genomes have a base; a gap in a third genome does not drop the site. `panaroo_core.tsv` uses the Panaroo core-gene alignment. This matrix is consumed by the clustering module and is also useful for manual inspection of isolate relatedness.
 
 ### gubbins/ and beast2/
 
@@ -403,9 +403,10 @@ When `--tree_builder fasttree` is selected, output appears in `fasttree/` contai
   - `gubbins.recombination_predictions.gff`: Recombinant regions per branch.
   - `gubbins.per_branch_statistics.csv`: SNPs inside / outside recombination, r/m per branch.
   - `gubbins.final_tree.tre`: Recombination-aware ML tree.
-  - `snps.masked.fasta`: Variable sites after masking recombination (BEAST2 input).
+  - `snps.masked.fasta`: Variable sites after masking recombination, strict core (BEAST2 input).
+  - `masked.full.aln`: Whole-genome alignment with recombinant segments masked (input to `gubbins_masked.tsv`).
   - `constant_sites.txt`: Invariant A C G T counts of the masked alignment.
-- `snpdists/gubbins_masked.tsv`: Pairwise SNP distances after masking recombination.
+- `snpdists/gubbins_masked.tsv`: Pairwise SNP distances on the recombination-masked whole-genome alignment.
 - `beast2/` (`--use_beast` only)
   - `beast_run.xml`: BEAST 2.7 input (HKY+Γ4, strict clock, constant-size coalescent).
   - `beast_run.log`, `beast_run.trees`: MCMC trace and sampled trees (check ESS in [Tracer](https://github.com/beast-dev/tracer)).

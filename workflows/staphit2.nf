@@ -74,7 +74,13 @@ workflow STAPHIT2 {
     // Snippy cannot align raw ONT reads, so long-only samples use their assembly (--ctgs).
     def is_long = { meta, _x -> meta.mode == 'long' }
     ch_kma_reads    = ch_trimmed.mix(QC_ASSEMBLY.out.long_reads.filter(is_long))
-    ch_snippy_reads = ch_trimmed.mix(ch_assemblies.filter(is_long))
+    // Only samples that passed assembly/species QC go into the SNP alignment: one failed
+    // genome puts N across the core and hides real differences between the others.
+    ch_snippy_reads = ch_trimmed
+        .map { meta, reads -> [ meta.id, meta, reads ] }
+        .join( ch_assemblies.map { meta, _asm -> [ meta.id ] } )
+        .map { _id, meta, reads -> [ meta, reads ] }
+        .mix(ch_assemblies.filter(is_long))
 
     SA_TYPING ( ch_assemblies, ch_kma_reads )
     ch_versions = ch_versions.mix(SA_TYPING.out.versions)
