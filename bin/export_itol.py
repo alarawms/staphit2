@@ -397,15 +397,30 @@ COUNTRY_CONTINENT = {
     "Sweden": "Europe", "Norway": "Europe", "Denmark": "Europe",
     "Rwanda": "Africa", "Nigeria": "Africa", "South Africa": "Africa",
     "Egypt": "Africa", "Kenya": "Africa",
+    "Ireland": "Europe", "Vietnam": "Asia",
 }
+
+COUNTRY_NORM = {
+    "united kingdom": "UK", "great britain": "UK", "england": "UK",
+    "scotland": "UK", "wales": "UK", "viet nam": "Vietnam",
+    "united states": "USA", "united states of america": "USA",
+}
+COUNTRY_MISSING = {"unknown", "not collected", "not provided", "missing",
+                   "not applicable", "na", "n/a", "none"}
+
+def norm_country(raw):
+    r = (raw or "").strip()
+    if r.lower() in COUNTRY_MISSING:
+        return ""
+    return COUNTRY_NORM.get(r.lower(), r)
 
 country_map = {}
 for sid in ids:
     pm  = pub_meta.get(sid, {})
     lm  = local_meta.get(sid, {})
-    c   = pm.get("country", "").split(":")[0].strip()
+    c   = norm_country(pm.get("country", "").split(":")[0])
     if not c:
-        c = lm.get("geo_loc_country", "").strip()
+        c = norm_country(lm.get("geo_loc_country", ""))
     if c:
         country_map[sid] = c
 
