@@ -8,7 +8,8 @@ process GUBBINS {
     path full_aln           // snippy-core core.full.aln (Reference + samples)
 
     output:
-    path "snps.masked.fasta",                       emit: snps       // variable sites after masking recombination
+    path "snps.masked.fasta",                       emit: snps       // variable sites after masking recombination (strict core, for BEAST2)
+    path "masked.full.aln",                         emit: masked_aln // whole-genome alignment, recombination masked (pairwise SNP distances)
     path "constant_sites.txt",                      emit: constant   // invariant A C G T counts (BEAST2 ascertainment)
     path "gubbins.recombination_predictions.gff",   emit: gff
     path "gubbins.final_tree.tre",                  emit: tree
@@ -27,6 +28,7 @@ process GUBBINS {
     """
     printf ">s1\\nACGA\\n>s2\\nACTT\\n" > snps.masked.fasta
     echo "700000 700000 700000 700000" > constant_sites.txt
+    cp snps.masked.fasta masked.full.aln
     touch gubbins.recombination_predictions.gff gubbins.final_tree.tre gubbins.per_branch_statistics.csv
     """
 }

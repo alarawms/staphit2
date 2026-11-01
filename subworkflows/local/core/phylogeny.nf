@@ -33,8 +33,8 @@ workflow PHYLOGENY {
     ch_beast2_tree  = channel.empty()
     // SNP distances for clustering and transmission pairs: Gubbins-masked SNPs, else
     // Snippy whole-genome SNPs, else (--phylo_method panaroo) the Panaroo core. The
-    // Panaroo core adds hundreds of SNPs between genomes that cgMLST and Snippy call
-    // identical (paralogs, gene-by-gene alignment), so it is only used for the tree.
+    // Panaroo core adds SNPs from paralogs and gene-by-gene alignment, so it is only
+    // used for the tree.
     ch_cluster_dists = channel.empty()
 
     //
@@ -80,8 +80,10 @@ workflow PHYLOGENY {
             ch_ref.collect()
         )
 
-        // SNP distances from whole-genome (for outbreak clustering)
-        SNPDISTS_SNIPPY ( SNIPPY_CORE.out.aln.map { aln -> [ [id: 'snippy_wgs'], aln ] } )
+        // SNP distances from the whole-genome alignment (for outbreak clustering).
+        // snp-dists compares each pair only where both have a base, so a gap in a third
+        // genome does not remove the site, as it would in the strict core (core.aln).
+        SNPDISTS_SNIPPY ( SNIPPY_CORE.out.full_aln.map { aln -> [ [id: 'snippy_wgs'], aln ] } )
         ch_cluster_dists = SNPDISTS_SNIPPY.out.tsv
         ch_versions = ch_versions.mix(SNPDISTS_SNIPPY.out.versions)
 
@@ -90,7 +92,7 @@ workflow PHYLOGENY {
         // unless BEAST2 needs it.
         if (!params.skip_gubbins || params.use_beast) {
             GUBBINS ( SNIPPY_CORE.out.full_aln )
-            SNPDISTS_GUBBINS ( GUBBINS.out.snps.map { aln -> [ [id: 'gubbins_masked'], aln ] } )
+            SNPDISTS_GUBBINS ( GUBBINS.out.masked_aln.map { aln -> [ [id: 'gubbins_masked'], aln ] } )
             ch_versions = ch_versions.mix(SNPDISTS_GUBBINS.out.versions)
             ch_cluster_dists = SNPDISTS_GUBBINS.out.tsv
         }
