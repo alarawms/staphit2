@@ -41,6 +41,7 @@ workflow CLUSTERING {
         ch_calls_in = ch_assemblies
             .map { meta, fasta -> [ meta.id, fasta ] }
             .toSortedList { a, b -> a[0] <=> b[0] }
+            .filter { pairs -> pairs }   // toSortedList emits [] when no assembly passed; don't run chewBBACA on nothing
             .map { pairs -> [ pairs.collect { p -> p[0] }, pairs.collect { p -> p[1] } ] }
         CHEWBBACA_ALLELE ( ch_calls_in, ch_schema )
         CGMLST_DISTS ( CHEWBBACA_ALLELE.out.profiles )

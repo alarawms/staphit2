@@ -67,6 +67,10 @@ workflow STAPHIT2 {
         ch_assemblies        = QC_ASSEMBLY.out.passed_assemblies
         ch_species_excluded  = channel.value(file("${projectDir}/assets/NO_SPECIES_QC"))
     }
+    // Nothing left to analyse: stop with one clear message instead of a downstream tool failing on empty input
+    ch_assemblies = ch_assemblies.ifEmpty {
+        error "No assembly passed the assembly-size, QC and species checks, so there is nothing to analyse. See the warnings above."
+    }
 
     // ── Phase 2: S. aureus Typing ───────────────────────────────────────────
     // Reads per sample: trimmed short reads (short/hybrid) or ONT reads (long-only).
