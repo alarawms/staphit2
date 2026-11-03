@@ -86,10 +86,17 @@ workflow QC_ASSEMBLY {
     // --min_assembly_size .. --max_assembly_size (sequence length, not file size)
     ch_assembly_lengths = ch_primary_scaffolds.map { meta, fasta -> [ meta, assemblyLength(fasta) ] }
 
-    ch_assemblies = ch_primary_scaffolds
+    ch_sized = ch_primary_scaffolds
         .join(ch_assembly_lengths)
-        .filter { _meta, _fasta, len -> len >= params.min_assembly_size && len <= params.max_assembly_size }
-        .map { meta, fasta, _len -> [ meta, fasta ] }
+        .branch { _meta, _fasta, len ->
+            pass: len >= params.min_assembly_size && len <= params.max_assembly_size
+            fail: true
+        }
+    ch_sized.fail.subscribe { meta, _fasta, len ->
+        log.warn "${meta.id}: assembly is ${len} bp, outside ${params.min_assembly_size}-${params.max_assembly_size} bp, so it was dropped " +
+                 "(wrong species, contamination or a failed assembly; check the species with Mash)"
+    }
+    ch_assemblies = ch_sized.pass.map { meta, fasta, _len -> [ meta, fasta ] }
 
     //
     // MODULE: Assembly QC with QUAST
