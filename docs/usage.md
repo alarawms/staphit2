@@ -290,8 +290,9 @@ Databases are downloaded on the first run and published to `<outdir>/databases/`
 | ------------------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `--cluster_by`           | `cgmlst`    | Distances to cluster on: `cgmlst`, `snp`, or `both` (linked by either)                                                                                                                                                          |
 | `--cluster_cgmlst_tiers` | `10,24,50`  | Allele differences (PubMLST scheme 20) for the direct transmission, outbreak and related tiers                                                                                                                                  |
-| `--cluster_snp_tiers`    | `15,50,200` | SNP thresholds for the same tiers with `--cluster_by snp\|both`, and for transmission pairs (Gubbins-masked SNPs, else Snippy whole-genome SNPs; with `--phylo_method panaroo` the Panaroo core, where `15,50,200` fits better) |
+| `--cluster_snp_tiers`    | `5,15,40`   | SNP thresholds for the same tiers with `--cluster_by snp\|both`, and for transmission pairs (Gubbins-masked SNPs, else Snippy whole-genome SNPs; `15,50,200` fits the Panaroo core better, used with `--phylo_method panaroo`) |
 | `--skip_cgmlst`          | `false`     | Skip cgMLST (schema download and allele calling); clustering falls back to SNPs                                                                                                                                                 |
+| `--skip_clustering`      | `false`     | Skip tiered outbreak clustering (OUTBREAK_CLUSTER); cgMLST calling and the MST still run unless `--skip_cgmlst` is also set. Single-linkage clustering has no temporal or epidemiological constraint and does not bound cluster diameter -- treat its output as a genomic-distance hypothesis, not a finding |
 
 #### Outbreak clustering thresholds
 
