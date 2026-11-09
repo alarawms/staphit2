@@ -101,7 +101,7 @@ meta <- meta |>
 top_countries <- names(sort(table(meta$country[meta$country != "Unknown"]), decreasing = TRUE))[seq_len(12)]
 meta$country_lab <- ifelse(meta$country %in% c(top_countries, "Unknown"), meta$country, "Other")
 
-if (file.exists(cluster_file)) {
+if (file.exists(cluster_file) && file.size(cluster_file) > 0) {   # 0 bytes = --skip_clustering placeholder
   meta <- left_join(meta,
     read.delim(cluster_file, check.names = FALSE, quote = "", na.strings = c("", "NA")) |>
       select(sample_id, outbreak_cluster),
