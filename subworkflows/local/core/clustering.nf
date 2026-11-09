@@ -49,17 +49,31 @@ workflow CLUSTERING {
         ch_cgmlst_stats = CGMLST_DISTS.out.stats
     }
 
-    OUTBREAK_CLUSTER ( ch_snp_dists, ch_cgmlst_dists, ch_summary )
+    if (params.skip_clustering) {
+        // Tiered single-linkage clustering has no temporal/epidemiological constraint and does
+        // not bound cluster diameter; see nextflow.config. Downstream consumers (REPORT,
+        // ITOL_EXPORT) already skip on this placeholder's filename (NO_CLUSTERS); plot_mst.R
+        // and plot_tree.R check file size, not just existence, so a 0-byte file degrades safely.
+        ch_clusters_out = channel.value(file("${projectDir}/assets/NO_CLUSTERS"))
+        ch_report_out   = channel.value(file("${projectDir}/assets/NO_CLUSTERS"))
+        ch_pairs_out    = channel.value(file("${projectDir}/assets/NO_CLUSTERS"))
+    } else {
+        OUTBREAK_CLUSTER ( ch_snp_dists, ch_cgmlst_dists, ch_summary )
+        ch_clusters_out = OUTBREAK_CLUSTER.out.clusters
+        ch_report_out   = OUTBREAK_CLUSTER.out.report
+        ch_pairs_out    = OUTBREAK_CLUSTER.out.pairs
+    }
 
     // cgMLST minimum spanning tree, annotated with the summary metadata and clusters
+    // (still runs with --skip_clustering: MST_PLOT tolerates an empty/missing clusters file)
     if (!params.skip_cgmlst) {
         GRAPETREE ( CGMLST_DISTS.out.grapetree )
-        MST_PLOT ( GRAPETREE.out.tree, ch_summary, OUTBREAK_CLUSTER.out.clusters )
+        MST_PLOT ( GRAPETREE.out.tree, ch_summary, ch_clusters_out )
     }
 
     emit:
-    clusters     = OUTBREAK_CLUSTER.out.clusters  // path(clusters.tsv)
-    report       = OUTBREAK_CLUSTER.out.report    // path(cluster_report.json)
-    pairs        = OUTBREAK_CLUSTER.out.pairs     // path(transmission_pairs.tsv)
-    cgmlst_stats = ch_cgmlst_stats                // path(cgmlst_stats.tsv); empty with --skip_cgmlst
+    clusters     = ch_clusters_out  // path(clusters.tsv|NO_CLUSTERS)
+    report       = ch_report_out    // path(cluster_report.json|NO_CLUSTERS)
+    pairs        = ch_pairs_out     // path(transmission_pairs.tsv|NO_CLUSTERS)
+    cgmlst_stats = ch_cgmlst_stats  // path(cgmlst_stats.tsv); empty with --skip_cgmlst
 }

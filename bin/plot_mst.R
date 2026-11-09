@@ -45,7 +45,7 @@ meta <- data.frame(
   isolation_source = col("source_group"),
   stringsAsFactors = FALSE
 )
-if (file.exists(cluster_file)) {
+if (file.exists(cluster_file) && file.size(cluster_file) > 0) {   # 0 bytes = --skip_clustering placeholder
   cl <- read.delim(cluster_file, check.names = FALSE, na.strings = c("", "NA"), colClasses = "character")
   meta <- left_join(meta, cl, by = c("ID" = "sample_id"))
 }
